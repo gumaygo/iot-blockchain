@@ -25,6 +25,11 @@ export class Blockchain {
       const raw = fs.readFileSync(this.chainFile, 'utf-8');
       try {
         this.chain = JSON.parse(raw);
+        // Jika chain kosong (array kosong), buat Genesis Block baru
+        if (Array.isArray(this.chain) && this.chain.length === 0) {
+          this.chain = [this.createGenesisBlock()];
+          fs.writeFileSync(this.chainFile, JSON.stringify(this.chain, null, 2));
+        }
       } catch (e) {
         console.warn('⚠️ chain.json corrupt, creating new chain.');
         this.chain = [this.createGenesisBlock()];
@@ -45,6 +50,11 @@ export class Blockchain {
   }
 
   addBlock(data) {
+    // Jika data string '[object Object]', ubah ke object kosong (atau bisa throw error)
+    if (typeof data === 'string' && data === '[object Object]') {
+      console.warn('⚠️ Data block tidak valid: "[object Object]", diubah ke object kosong.');
+      data = {};
+    }
     const lastBlock = this.getLatestBlock();
     const newBlock = new Block(
       this.chain.length,
