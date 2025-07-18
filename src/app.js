@@ -1,4 +1,4 @@
-// src/node.js
+// src/app.js
 import express from 'express';
 import { Blockchain } from './blockchain.js';
 import { verifySignature, isValidValidator } from './utils.js';
