@@ -1,52 +1,56 @@
-// src/grpc-server.js
 import grpc from '@grpc/grpc-js';
 import protoLoader from '@grpc/proto-loader';
 import fs from 'fs';
-import { Blockchain } from './blockchain.js';
+import path from 'path';
 
-const packageDef = protoLoader.loadSync('./proto/blockchain.proto');
-const grpcObj = grpc.loadPackageDefinition(packageDef);
-const blockchainPkg = grpcObj.blockchain;
+const __dirname = path.resolve();
 
-const blockchain = new Blockchain();
-
-function receiveBlock(call, callback) {
-  const block = call.request;
-  const last = blockchain.getLatestBlock();
-
-  if (block.index === last.index + 1 && block.previousHash === last.hash) {
-    blockchain.chain.push(block);
-    fs.writeFileSync('./chain/chain.json', JSON.stringify(blockchain.chain, null, 2));
-    console.log(`🔗 Received block via gRPC: index ${block.index}`);
-  } else {
-    console.log('⚠️ Rejected invalid block via gRPC');
+// Load proto
+const packageDefinition = protoLoader.loadSync(
+  path.join(__dirname, 'proto', 'blockchain.proto'),
+  {
+    keepCase: true,
+    longs: String,
+    enums: String,
+    defaults: true,
+    oneofs: true
   }
+);
+const grpcObject = grpc.loadPackageDefinition(packageDefinition);
+// Ganti 'blockchain' sesuai nama package di proto!
+const blockchainProto = grpcObject.blockchain;
 
-  callback(null, { blocks: blockchain.chain });
-}
-
-function getChain(_, callback) {
-  callback(null, { blocks: blockchain.chain });
-}
-
-// TLS server with client certificate required (mTLS)
-const server = new grpc.Server();
-
-server.addService(blockchainPkg.Blockchain.service, {
-  ReceiveBlock: receiveBlock,
-  GetChain: getChain
-});
-
-const creds = grpc.ServerCredentials.createSsl(
-  fs.readFileSync('./key/ca.crt'), // Trust store (CA certs)
+// TLS
+const ca = fs.readFileSync(path.join(__dirname, 'key', 'ca.crt'));
+const cert = fs.readFileSync(path.join(__dirname, 'key', 'server.crt'));
+const key = fs.readFileSync(path.join(__dirname, 'key', 'server.key'));
+const credentials = grpc.ServerCredentials.createSsl(
+  ca,
   [{
-    cert_chain: fs.readFileSync('./key/server.crt'),
-    private_key: fs.readFileSync('./key/server.key')
+    cert_chain: cert,
+    private_key: key
   }],
-  true // requireClientCertificate = true
+  true
 );
 
-server.bindAsync('0.0.0.0:50051', creds, () => {
-  console.log('🔐 gRPC server with mTLS running on port 50051');
+// Data blockchain local (dummy)
+let blockchain = [
+  { index: 0, timestamp: new Date().toISOString(), data: "Genesis Block", hash: "hash0", previousHash: "0" }
+];
+
+// Ganti method berikut agar sesuai proto kamu!
+function GetBlockchain(call, callback) {
+  callback(null, { chain: blockchain });
+}
+
+// Ganti 'Blockchain' sesuai service di proto!
+const server = new grpc.Server();
+server.addService(blockchainProto.Blockchain.service, {
+  GetBlockchain
+  // tambahkan method lain jika ada
+});
+
+server.bindAsync('0.0.0.0:50051', credentials, () => {
+  console.log('✅ gRPC server running on port 50051');
   server.start();
 });
