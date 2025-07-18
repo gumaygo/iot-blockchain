@@ -33,20 +33,43 @@ const credentials = grpc.ServerCredentials.createSsl(
   true
 );
 
-// Data blockchain local (dummy)
-let blockchain = [
-  { index: 0, timestamp: new Date().toISOString(), data: "Genesis Block", hash: "hash0", previousHash: "0" }
-];
+// Data blockchain local (load dari file)
+function loadChain() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, 'chain', 'chain.json'), 'utf-8'));
+  } catch {
+    return [{ index: 0, timestamp: new Date().toISOString(), data: "Genesis Block", hash: "hash0", previousHash: "0" }];
+  }
+}
+
+function saveChain(chain) {
+  fs.writeFileSync(path.join(__dirname, 'chain', 'chain.json'), JSON.stringify(chain, null, 2));
+}
 
 // Ganti method berikut agar sesuai proto kamu!
 function GetBlockchain(call, callback) {
-  callback(null, { chain: blockchain });
+  const chain = loadChain();
+  callback(null, { chain });
+}
+
+function ReceiveBlock(call, callback) {
+  const block = call.request;
+  let chain = loadChain();
+  const latest = chain[chain.length - 1];
+  if (block.index === latest.index + 1 && block.previousHash === latest.hash) {
+    chain.push(block);
+    saveChain(chain);
+    callback(null, { chain });
+  } else {
+    callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid block sequence' });
+  }
 }
 
 // Ganti 'Blockchain' sesuai service di proto!
 const server = new grpc.Server();
 server.addService(blockchainProto.Blockchain.service, {
-  GetBlockchain
+  GetBlockchain,
+  ReceiveBlock
   // tambahkan method lain jika ada
 });
 

@@ -30,18 +30,9 @@ app.post('/add-sensor-data', async (req, res) => {
 
   // Tambah block
   const block = blockchain.addBlock({ sensor_id, value, timestamp });
-  logAudit(`✔️ Block accepted from ${sensor_id} | index: ${block.index}`);
+  logAudit(`\u2714\ufe0f Block accepted from ${sensor_id} | index: ${block.index}`);
 
-  // Broadcast ke peer
-  const peers = getPeers();
-  for (const peer of peers) {
-    try {
-      await axios.post(`${peer}/receive-block`, block);
-    } catch (e) {
-      console.warn(`⚠️ Failed to broadcast to ${peer}`);
-    }
-  }
-
+  // Broadcast ke peer via gRPC saja
   await broadcastBlock(block);
   res.status(201).json({ message: 'Block added and broadcasted', block });
 });

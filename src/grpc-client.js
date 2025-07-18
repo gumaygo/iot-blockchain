@@ -32,12 +32,13 @@ export async function broadcastBlock(block) {
   for (const peer of peers) {
     const client = new BlockchainService(peer, credentials);
 
+    const blockToSend = { ...block, data: typeof block.data === 'object' ? JSON.stringify(block.data) : block.data };
     await new Promise((resolve) => {
-      client.ReceiveBlock(block, (err, response) => {
+      client.ReceiveBlock(blockToSend, (err, response) => {
         if (err) {
-          console.warn(`❌ Failed to send to ${peer}:`, err.message);
+          console.warn(`\u274c Failed to send to ${peer}:`, err.message);
         } else {
-          console.log(`✅ Block sent to ${peer}, chain length: ${response.blocks.length}`);
+          console.log(`\u2705 Block sent to ${peer}, chain length: ${response.chain.length}`);
         }
         resolve();
       });

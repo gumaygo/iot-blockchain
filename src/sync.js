@@ -18,16 +18,16 @@ export async function syncChain(localChain) {
     const client = new BlockchainService(peer, credentials);
 
     await new Promise((resolve) => {
-      client.GetChain({}, (err, response) => {
+      client.GetBlockchain({}, (err, response) => {
         if (err) {
-          console.warn(`❌ Failed to sync from ${peer}:`, err.message);
+          console.warn(`\u274c Failed to sync from ${peer}:`, err.message);
           return resolve();
         }
 
-        const remoteChain = response.blocks;
+        const remoteChain = response.chain;
         if (remoteChain.length > localChain.length) {
           fs.writeFileSync('./chain/chain.json', JSON.stringify(remoteChain, null, 2));
-          console.log(`🔄 Synced from ${peer} ✅`);
+          console.log(`\ud83d\udd04 Synced from ${peer} \u2705`);
         }
         resolve();
       });
