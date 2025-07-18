@@ -2,6 +2,7 @@ import grpc from '@grpc/grpc-js';
 import protoLoader from '@grpc/proto-loader';
 import fs from 'fs';
 import path from 'path';
+import { Blockchain } from './blockchain.js';
 
 const __dirname = path.resolve();
 
@@ -17,7 +18,6 @@ const packageDefinition = protoLoader.loadSync(
   }
 );
 const grpcObject = grpc.loadPackageDefinition(packageDefinition);
-// Ganti 'blockchain' sesuai nama package di proto!
 const blockchainProto = grpcObject.blockchain;
 
 // TLS
@@ -33,26 +33,15 @@ const credentials = grpc.ServerCredentials.createSsl(
   true
 );
 
-// Data blockchain local (load dari file)
-function loadChain() {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(__dirname, 'chain', 'chain.json'), 'utf-8'));
-  } catch {
-    return [{ index: 0, timestamp: new Date().toISOString(), data: "Genesis Block", hash: "hash0", previousHash: "0" }];
-  }
-}
+const blockchain = new Blockchain();
 
-function saveChain(chain) {
-  fs.writeFileSync(path.join(__dirname, 'chain', 'chain.json'), JSON.stringify(chain, null, 2));
-}
-
-// Ganti method berikut agar sesuai proto kamu!
-function GetBlockchain(call, callback) {
-  const chain = loadChain();
+async function GetBlockchain(call, callback) {
+  await blockchain.init();
+  const chain = await blockchain.getChain();
   callback(null, { chain });
 }
 
-function ReceiveBlock(call, callback) {
+async function ReceiveBlock(call, callback) {
   const block = call.request;
   // Pastikan data block konsisten: jika string, parse ke object
   if (typeof block.data === 'string') {
@@ -60,23 +49,21 @@ function ReceiveBlock(call, callback) {
       block.data = JSON.parse(block.data);
     } catch {}
   }
-  let chain = loadChain();
-  const latest = chain[chain.length - 1];
+  await blockchain.init();
+  const latest = await blockchain.getLatestBlock();
   if (block.index === latest.index + 1 && block.previousHash === latest.hash) {
-    chain.push(block);
-    saveChain(chain);
+    await blockchain.addBlock(block.data);
+    const chain = await blockchain.getChain();
     callback(null, { chain });
   } else {
     callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid block sequence' });
   }
 }
 
-// Ganti 'Blockchain' sesuai service di proto!
 const server = new grpc.Server();
 server.addService(blockchainProto.Blockchain.service, {
-  GetBlockchain,
-  ReceiveBlock
-  // tambahkan method lain jika ada
+  GetBlockchain: (call, callback) => { GetBlockchain(call, callback); },
+  ReceiveBlock: (call, callback) => { ReceiveBlock(call, callback); }
 });
 
 server.bindAsync('0.0.0.0:50051', credentials, () => {

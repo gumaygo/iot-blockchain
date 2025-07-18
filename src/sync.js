@@ -1,5 +1,6 @@
 import grpc from '@grpc/grpc-js';
 import protoLoader from '@grpc/proto-loader';
+import { Blockchain } from './blockchain.js';
 import fs from 'fs';
 
 const packageDef = protoLoader.loadSync('./proto/blockchain.proto');
@@ -16,12 +17,13 @@ export function getPeers() {
   return peers;
 }
 
-export async function syncChain(localChain) {
+export async function syncChain(blockchain) {
+  const localChain = await blockchain.getChain();
   for (const peer of peers) {
     const client = new BlockchainService(peer, credentials);
 
     await new Promise((resolve) => {
-      client.GetBlockchain({}, (err, response) => {
+      client.GetBlockchain({}, async (err, response) => {
         if (err) {
           console.warn(`\u274c Failed to sync from ${peer}:`, err.message);
           return resolve();
@@ -30,7 +32,11 @@ export async function syncChain(localChain) {
         const remoteChain = response.chain;
         console.log(`Peer ${peer} chain length: ${remoteChain.length}`);
         if (remoteChain.length > localChain.length) {
-          fs.writeFileSync('./chain/chain.json', JSON.stringify(remoteChain, null, 2));
+          // Overwrite LevelDB dengan chain dari peer
+          for (let i = 0; i < remoteChain.length; i++) {
+            await blockchain.db.put(`block_${i}`, remoteChain[i]);
+          }
+          await blockchain.db.put('last', remoteChain.length - 1);
           console.log(`\ud83d\udd04 Synced from ${peer} \u2705`);
         }
         resolve();

@@ -16,6 +16,7 @@
     "axios": "^1.10.0",
     "crypto": "^1.0.1",
     "express": "^5.1.0",
-    "fs": "^0.0.1-security"
+    "fs": "^0.0.1-security",
+    "level": "^10.0.0"
   }
 }

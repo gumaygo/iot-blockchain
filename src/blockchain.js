@@ -1,6 +1,8 @@
 // src/blockchain.js
 import { createHash } from 'crypto';
-import fs from 'fs';
+import level from 'level';
+
+const db = level('./blockchaindb', { valueEncoding: 'json' });
 
 export class Block {
   constructor(index, timestamp, data, previousHash = '') {
@@ -20,24 +22,21 @@ export class Block {
 
 export class Blockchain {
   constructor() {
-    this.chainFile = './chain/chain.json';
-    if (fs.existsSync(this.chainFile)) {
-      const raw = fs.readFileSync(this.chainFile, 'utf-8');
-      try {
-        this.chain = JSON.parse(raw);
-        // Jika chain kosong (array kosong), buat Genesis Block baru
-        if (Array.isArray(this.chain) && this.chain.length === 0) {
-          this.chain = [this.createGenesisBlock()];
-          fs.writeFileSync(this.chainFile, JSON.stringify(this.chain, null, 2));
-        }
-      } catch (e) {
-        console.warn('⚠️ chain.json corrupt, creating new chain.');
-        this.chain = [this.createGenesisBlock()];
-        fs.writeFileSync(this.chainFile, JSON.stringify(this.chain, null, 2));
+    this.db = db;
+    this.init();
+  }
+
+  async init() {
+    try {
+      const lastIndex = await this.getLastIndex();
+      if (lastIndex === null) {
+        // DB kosong, buat genesis block
+        const genesis = this.createGenesisBlock();
+        await this.db.put('block_0', genesis);
+        await this.db.put('last', 0);
       }
-    } else {
-      this.chain = [this.createGenesisBlock()];
-      fs.writeFileSync(this.chainFile, JSON.stringify(this.chain, null, 2));
+    } catch (e) {
+      console.warn('⚠️ Error init LevelDB:', e.message);
     }
   }
 
@@ -45,25 +44,51 @@ export class Blockchain {
     return new Block(0, new Date().toISOString(), { message: 'Genesis Block' }, '0');
   }
 
-  getLatestBlock() {
-    return this.chain[this.chain.length - 1];
+  async getLastIndex() {
+    try {
+      return await this.db.get('last');
+    } catch {
+      return null;
+    }
   }
 
-  addBlock(data) {
-    // Jika data string '[object Object]', ubah ke object kosong (atau bisa throw error)
-    if (typeof data === 'string' && data === '[object Object]') {
-      console.warn('⚠️ Data block tidak valid: "[object Object]", diubah ke object kosong.');
-      data = {};
+  async getLatestBlock() {
+    const lastIndex = await this.getLastIndex();
+    if (lastIndex === null) return null;
+    return await this.db.get(`block_${lastIndex}`);
+  }
+
+  async addBlock(data) {
+    const lastIndex = await this.getLastIndex();
+    let lastBlock;
+    if (lastIndex === null) {
+      lastBlock = this.createGenesisBlock();
+    } else {
+      lastBlock = await this.db.get(`block_${lastIndex}`);
     }
-    const lastBlock = this.getLatestBlock();
     const newBlock = new Block(
-      this.chain.length,
+      (lastIndex === null ? 1 : lastIndex + 1),
       new Date().toISOString(),
       data,
       lastBlock.hash
     );
-    this.chain.push(newBlock);
-    fs.writeFileSync(this.chainFile, JSON.stringify(this.chain, null, 2));
+    await this.db.put(`block_${newBlock.index}`, newBlock);
+    await this.db.put('last', newBlock.index);
     return newBlock;
+  }
+
+  async getChain() {
+    const chain = [];
+    let idx = 0;
+    while (true) {
+      try {
+        const block = await this.db.get(`block_${idx}`);
+        chain.push(block);
+        idx++;
+      } catch {
+        break;
+      }
+    }
+    return chain;
   }
 }
