@@ -7,7 +7,10 @@ const grpcObj = grpc.loadPackageDefinition(packageDef);
 const BlockchainService = grpcObj.blockchain.Blockchain;
 
 const peers = JSON.parse(fs.readFileSync('./peers.json', 'utf-8'));
-const credentials = grpc.credentials.createSsl(fs.readFileSync('./key/ca.crt'));
+const ca = fs.readFileSync('./key/ca.crt');
+const clientKey = fs.readFileSync('./key/client.key');
+const clientCert = fs.readFileSync('./key/client.crt');
+const credentials = grpc.credentials.createSsl(ca, clientKey, clientCert);
 
 export function getPeers() {
   return peers;
