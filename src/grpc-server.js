@@ -3,6 +3,7 @@ import protoLoader from '@grpc/proto-loader';
 import fs from 'fs';
 import path from 'path';
 import { Blockchain } from './blockchain.js';
+import { Level } from 'level';
 
 const __dirname = path.resolve();
 
@@ -33,7 +34,7 @@ const credentials = grpc.ServerCredentials.createSsl(
   true
 );
 
-const blockchain = new Blockchain();
+const blockchain = await Blockchain.create();
 
 async function GetBlockchain(call, callback) {
   await blockchain.init();
@@ -51,10 +52,26 @@ async function ReceiveBlock(call, callback) {
   }
   await blockchain.init();
   const latest = await blockchain.getLatestBlock();
+  // Validasi struktur block
+  if (typeof block !== 'object' || block === null || typeof block.index !== 'number' || typeof block.previousHash !== 'string' || typeof block.hash !== 'string' || typeof block.data !== 'object') {
+    return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid block structure' });
+  }
+  // Validasi hash block
+  const { createHash } = require('crypto');
+  const expectedHash = createHash('sha256')
+    .update(block.index + block.timestamp + JSON.stringify(block.data) + block.previousHash)
+    .digest('hex');
+  if (block.hash !== expectedHash) {
+    return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid block hash' });
+  }
   if (block.index === latest.index + 1 && block.previousHash === latest.hash) {
-    await blockchain.addBlock(block.data);
-    const chain = await blockchain.getChain();
-    callback(null, { chain });
+    try {
+      await blockchain.addBlock(block.data);
+      const chain = await blockchain.getChain();
+      callback(null, { chain });
+    } catch (e) {
+      callback({ code: grpc.status.INTERNAL, message: e.message });
+    }
   } else {
     callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid block sequence' });
   }

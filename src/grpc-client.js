@@ -31,18 +31,23 @@ export async function broadcastBlock(block) {
 
   for (const peer of peers) {
     const client = new BlockchainService(peer, credentials);
-
-    // Kirim block dengan data di-stringify
     const blockToSend = { ...block, data: JSON.stringify(block.data) };
-    await new Promise((resolve) => {
-      client.ReceiveBlock(blockToSend, (err, response) => {
-        if (err) {
-          console.warn(`\u274c Failed to send to ${peer}:`, err.message);
-        } else {
-          console.log(`\u2705 Block sent to ${peer}, chain length: ${response.chain.length}`);
-        }
-        resolve();
+    let sent = false;
+    for (let attempt = 1; attempt <= 3 && !sent; attempt++) {
+      await new Promise((resolve) => {
+        client.ReceiveBlock(blockToSend, (err, response) => {
+          if (err) {
+            console.warn(`❌ Failed to send to ${peer} (attempt ${attempt}):`, err.message);
+            if (attempt === 3) {
+              console.error(`❌ Giving up on ${peer}`);
+            }
+          } else {
+            console.log(`✅ Block sent to ${peer}, chain length: ${response.chain.length}`);
+            sent = true;
+          }
+          resolve();
+        });
       });
-    });
+    }
   }
 }

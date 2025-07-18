@@ -1,8 +1,6 @@
 // src/blockchain.js
 import { createHash } from 'crypto';
-import level from 'level';
-
-const db = level('./blockchaindb', { valueEncoding: 'json' });
+import { Level } from 'level';
 
 export class Block {
   constructor(index, timestamp, data, previousHash = '') {
@@ -21,9 +19,16 @@ export class Block {
 }
 
 export class Blockchain {
-  constructor() {
+  constructor(db) {
     this.db = db;
-    this.init();
+  }
+
+  static async create() {
+    const db = new Level('./blockchaindb', { valueEncoding: 'json' });
+    await db.open(); // pastikan DB sudah open
+    const blockchain = new Blockchain(db);
+    await blockchain.init();
+    return blockchain;
   }
 
   async init() {
@@ -41,7 +46,8 @@ export class Blockchain {
   }
 
   createGenesisBlock() {
-    return new Block(0, new Date().toISOString(), { message: 'Genesis Block' }, '0');
+    // Timestamp tetap agar hash genesis block konsisten di semua node
+    return new Block(0, '2023-01-01T00:00:00.000Z', { message: 'Genesis Block' }, '0');
   }
 
   async getLastIndex() {
@@ -53,21 +59,61 @@ export class Blockchain {
   }
 
   async getLatestBlock() {
-    const lastIndex = await this.getLastIndex();
-    if (lastIndex === null) return null;
-    return await this.db.get(`block_${lastIndex}`);
+    let lastIndex = await this.getLastIndex();
+    if (lastIndex === null) {
+      // DB kosong, buat genesis block dulu
+      const genesis = this.createGenesisBlock();
+      await this.db.put('block_0', genesis);
+      await this.db.put('last', 0);
+      return genesis;
+    }
+    let block;
+    try {
+      block = await this.db.get(`block_${lastIndex}`);
+    } catch {
+      // Jika block terakhir tidak ada, buat genesis block
+      const genesis = this.createGenesisBlock();
+      await this.db.put('block_0', genesis);
+      await this.db.put('last', 0);
+      return genesis;
+    }
+    return block;
   }
 
   async addBlock(data) {
-    const lastIndex = await this.getLastIndex();
-    let lastBlock;
+    let lastIndex = await this.getLastIndex();
     if (lastIndex === null) {
-      lastBlock = this.createGenesisBlock();
-    } else {
+      // DB kosong, buat genesis block dulu
+      const genesis = this.createGenesisBlock();
+      await this.db.put('block_0', genesis);
+      await this.db.put('last', 0);
+      lastIndex = 0;
+    }
+    let lastBlock;
+    try {
       lastBlock = await this.db.get(`block_${lastIndex}`);
+    } catch {
+      // Jika block terakhir tidak ada, buat genesis block
+      const genesis = this.createGenesisBlock();
+      await this.db.put('block_0', genesis);
+      await this.db.put('last', 0);
+      lastBlock = genesis;
+      lastIndex = 0;
+    }
+    if (!lastBlock) {
+      // Fallback ekstra: jika tetap undefined, buat genesis block
+      const genesis = this.createGenesisBlock();
+      await this.db.put('block_0', genesis);
+      await this.db.put('last', 0);
+      lastBlock = genesis;
+      lastIndex = 0;
+    }
+    // Validasi data block
+    if (!data || typeof data !== 'object' || typeof data.sensor_id !== 'string' || typeof data.value !== 'number' || typeof data.timestamp !== 'string') {
+      throw new Error('Invalid block data');
     }
     const newBlock = new Block(
-      (lastIndex === null ? 1 : lastIndex + 1),
+      lastIndex + 1,
       new Date().toISOString(),
       data,
       lastBlock.hash

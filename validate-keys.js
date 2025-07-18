@@ -18,7 +18,21 @@ console.log('🔍 Validating TLS key setup...\n');
 for (const file of REQUIRED_FILES) {
   const filePath = path.join(folder, file);
   if (fs.existsSync(filePath)) {
-    const size = fs.statSync(filePath).size;
+    let size = 0;
+    try {
+      size = fs.statSync(filePath).size;
+    } catch (e) {
+      console.warn(`⚠️ Warning: Could not stat ${file}:`, e.message);
+      allGood = false;
+      continue;
+    }
+    try {
+      fs.readFileSync(filePath);
+    } catch (e) {
+      console.warn(`⚠️ Warning: Could not read ${file}:`, e.message);
+      allGood = false;
+      continue;
+    }
     console.log(`✅ Found: ${file} (${size} bytes)`);
     if (size < 100) {
       console.warn(`⚠️ Warning: ${file} is too small or possibly invalid`);

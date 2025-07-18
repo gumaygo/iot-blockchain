@@ -9,5 +9,9 @@ const AUDIT_LOG = './audit/log.txt';
  */
 export function logAudit(entry) {
   const line = `[${new Date().toISOString()}] ${entry}\n`;
-  fs.appendFileSync(AUDIT_LOG, line);
+  try {
+    fs.appendFileSync(AUDIT_LOG, line);
+  } catch (e) {
+    console.error('❌ Error writing audit log:', e.message);
+  }
 }

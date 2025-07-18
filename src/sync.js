@@ -25,22 +25,47 @@ export async function syncChain(blockchain) {
     await new Promise((resolve) => {
       client.GetBlockchain({}, async (err, response) => {
         if (err) {
-          console.warn(`\u274c Failed to sync from ${peer}:`, err.message);
+          console.warn(`❌ Failed to sync from ${peer}:`, err.message);
           return resolve();
         }
 
         const remoteChain = response.chain;
         console.log(`Peer ${peer} chain length: ${remoteChain.length}`);
-        if (remoteChain.length > localChain.length) {
+        // Validasi chain dari peer
+        if (remoteChain.length > localChain.length && validateChain(remoteChain)) {
           // Overwrite LevelDB dengan chain dari peer
-          for (let i = 0; i < remoteChain.length; i++) {
-            await blockchain.db.put(`block_${i}`, remoteChain[i]);
+          try {
+            for (let i = 0; i < remoteChain.length; i++) {
+              await blockchain.db.put(`block_${i}`, remoteChain[i]);
+            }
+            await blockchain.db.put('last', remoteChain.length - 1);
+            console.log(`🔄 Synced from ${peer} ✅`);
+          } catch (e) {
+            console.error('❌ Error writing chain to DB:', e.message);
           }
-          await blockchain.db.put('last', remoteChain.length - 1);
-          console.log(`\ud83d\udd04 Synced from ${peer} \u2705`);
+        } else if (remoteChain.length > localChain.length) {
+          console.warn('⚠️ Remote chain invalid, not syncing!');
         }
         resolve();
       });
     });
   }
+}
+
+function validateChain(chain) {
+  if (!Array.isArray(chain) || chain.length === 0) return false;
+  for (let i = 0; i < chain.length; i++) {
+    const block = chain[i];
+    if (typeof block !== 'object' || typeof block.index !== 'number' || typeof block.hash !== 'string' || typeof block.previousHash !== 'string' || typeof block.data !== 'object') {
+      return false;
+    }
+    // Validasi hash block
+    const { createHash } = require('crypto');
+    const expectedHash = createHash('sha256')
+      .update(block.index + block.timestamp + JSON.stringify(block.data) + block.previousHash)
+      .digest('hex');
+    if (block.hash !== expectedHash) return false;
+    if (i > 0 && block.previousHash !== chain[i - 1].hash) return false;
+  }
+  return true;
 }
