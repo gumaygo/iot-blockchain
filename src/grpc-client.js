@@ -4,6 +4,7 @@ import protoLoader from '@grpc/proto-loader';
 import fs from 'fs';
 import { getPeers } from './sync.js';
 
+// Load proto
 const packageDefinition = protoLoader.loadSync('./proto/blockchain.proto', {
   keepCase: true,
   longs: String,
@@ -15,14 +16,15 @@ const packageDefinition = protoLoader.loadSync('./proto/blockchain.proto', {
 const grpcObject = grpc.loadPackageDefinition(packageDefinition);
 const BlockchainService = grpcObject.blockchain.Blockchain;
 
-// Load trusted certificate authority (gabungan semua .crt dari node lain)
-const rootCert = fs.readFileSync('./key/ca.crt'); // hasil gabungan node1.crt + node2.crt + ...
+// Load mutual TLS credentials
+const caCert = fs.readFileSync('./key/ca.crt');
+const clientKey = fs.readFileSync('./key/client.key');
+const clientCert = fs.readFileSync('./key/client.crt');
 
-const credentials = grpc.credentials.createSsl(rootCert);
+const credentials = grpc.credentials.createSsl(caCert, clientKey, clientCert);
 
 /**
- * Broadcast block ke semua node di peers.json via gRPC
- * @param {Object} block - block yang ingin dikirim
+ * Kirim block ke semua peer menggunakan gRPC dengan mTLS
  */
 export async function broadcastBlock(block) {
   const peers = getPeers();
@@ -35,7 +37,7 @@ export async function broadcastBlock(block) {
         if (err) {
           console.warn(`❌ Failed to send to ${peer}:`, err.message);
         } else {
-          console.log(`✅ Sent to ${peer} | Chain length: ${response.blocks.length}`);
+          console.log(`✅ Block sent to ${peer}, chain length: ${response.blocks.length}`);
         }
         resolve();
       });
