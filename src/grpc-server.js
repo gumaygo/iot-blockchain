@@ -54,6 +54,12 @@ function GetBlockchain(call, callback) {
 
 function ReceiveBlock(call, callback) {
   const block = call.request;
+  // Pastikan data block konsisten: jika string, parse ke object
+  if (typeof block.data === 'string') {
+    try {
+      block.data = JSON.parse(block.data);
+    } catch {}
+  }
   let chain = loadChain();
   const latest = chain[chain.length - 1];
   if (block.index === latest.index + 1 && block.previousHash === latest.hash) {

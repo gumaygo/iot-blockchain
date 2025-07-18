@@ -1,3 +1,5 @@
 key/
-**/node_modules/ 
+**/node_modules/
 snapshot/
+chain/
+audit/
