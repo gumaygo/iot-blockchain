@@ -1,0 +1,19 @@
+[req]
+default_bits       = 4096
+distinguished_name = req_distinguished_name
+req_extensions     = req_ext
+x509_extensions    = req_ext
+prompt             = no
+
+[req_distinguished_name]
+C  = ID
+ST = Lampung
+L  = Bandar Lampung
+O  = SensorNuklirCorp
+CN = 172.16.2.254
+
+[req_ext]
+subjectAltName = @alt_names
+
+[alt_names]
+IP.1 = 172.16.2.254
