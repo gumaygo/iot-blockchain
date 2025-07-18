@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package blockchain;
+
+message Block {
+  int32 index = 1;
+  string timestamp = 2;
+  string previousHash = 3;
+  string hash = 4;
+  string sensor_id = 5;
+  float value = 6;
+  string data_timestamp = 7;
+}
+
+message ChainRequest {}
+message ChainResponse {
+  repeated Block blocks = 1;
+}
+
+service Blockchain {
+  rpc ReceiveBlock (Block) returns (ChainResponse);
+  rpc GetChain (ChainRequest) returns (ChainResponse);
+}

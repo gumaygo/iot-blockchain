@@ -1,0 +1,55 @@
+[
+  {
+    "index": 0,
+    "timestamp": "2025-07-17T14:22:52.887Z",
+    "data": {
+      "message": "Genesis Block"
+    },
+    "previousHash": "0",
+    "hash": "4060568bce9fc37ac970a05e0bebdd01dcce829cf4e5f6475bc6349ef9982e96"
+  },
+  {
+    "index": 1,
+    "timestamp": "2025-07-17T14:22:56.764Z",
+    "data": {
+      "sensor_id": "sensor-01",
+      "value": 28.5,
+      "timestamp": "2025-07-17T14:22:56.723Z"
+    },
+    "previousHash": "4060568bce9fc37ac970a05e0bebdd01dcce829cf4e5f6475bc6349ef9982e96",
+    "hash": "aeec78666a0068587bf4ef5c526b97f619fc2e6e7942981635fb9766fe8dbb29"
+  },
+  {
+    "index": 2,
+    "timestamp": "2025-07-17T14:23:06.765Z",
+    "data": {
+      "sensor_id": "sensor-01",
+      "value": 28.5,
+      "timestamp": "2025-07-17T14:23:06.737Z"
+    },
+    "previousHash": "aeec78666a0068587bf4ef5c526b97f619fc2e6e7942981635fb9766fe8dbb29",
+    "hash": "46eb851d61c7a32b090e31b3630be5227e907e36dd571f66900d1d61158c74ea"
+  },
+  {
+    "index": 3,
+    "timestamp": "2025-07-17T14:23:51.529Z",
+    "data": {
+      "sensor_id": "sensor-01",
+      "value": 28.5,
+      "timestamp": "2025-07-17T14:23:51.490Z"
+    },
+    "previousHash": "46eb851d61c7a32b090e31b3630be5227e907e36dd571f66900d1d61158c74ea",
+    "hash": "788f54d826b6c04650e5acceb8e4edd63a0bfc7f1ef86c97b62f35b945f8d34e"
+  },
+  {
+    "index": 4,
+    "timestamp": "2025-07-17T14:50:51.465Z",
+    "data": {
+      "sensor_id": "validator-01",
+      "value": 712.5,
+      "timestamp": "2025-07-17T14:50:47.219Z"
+    },
+    "previousHash": "788f54d826b6c04650e5acceb8e4edd63a0bfc7f1ef86c97b62f35b945f8d34e",
+    "hash": "a479b9d79b0116b2ab04b08b0b255b37a983710e8f17cf0651deb3da979af995"
+  }
+]
