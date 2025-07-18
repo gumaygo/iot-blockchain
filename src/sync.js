@@ -1,33 +1,36 @@
-// src/sync.js
-import axios from 'axios';
+import grpc from '@grpc/grpc-js';
+import protoLoader from '@grpc/proto-loader';
 import fs from 'fs';
 
-const PEER_FILE = './peers.json';
+const packageDef = protoLoader.loadSync('./proto/blockchain.proto');
+const grpcObj = grpc.loadPackageDefinition(packageDef);
+const BlockchainService = grpcObj.blockchain.Blockchain;
+
+const peers = JSON.parse(fs.readFileSync('./peers.json', 'utf-8'));
+const credentials = grpc.credentials.createSsl(fs.readFileSync('./key/ca.crt'));
 
 export function getPeers() {
-  return JSON.parse(fs.readFileSync(PEER_FILE, 'utf-8'));
+  return peers;
 }
 
 export async function syncChain(localChain) {
-  const peers = getPeers();
   for (const peer of peers) {
-    try {
-      const res = await axios.get(`${peer}/chain`);
-      const remoteChain = res.data;
-      if (remoteChain.length > localChain.length && isValidChain(remoteChain)) {
-        fs.writeFileSync('./chain/chain.json', JSON.stringify(remoteChain, null, 2));
-        console.log(`🔄 Synced chain from ${peer}`);
-        break;
-      }
-    } catch (e) {
-      console.warn(`❌ Failed to sync from ${peer}`);
-    }
-  }
-}
+    const client = new BlockchainService(peer, credentials);
 
-function isValidChain(chain) {
-  for (let i = 1; i < chain.length; i++) {
-    if (chain[i].previousHash !== chain[i - 1].hash) return false;
+    await new Promise((resolve) => {
+      client.GetChain({}, (err, response) => {
+        if (err) {
+          console.warn(`❌ Failed to sync from ${peer}:`, err.message);
+          return resolve();
+        }
+
+        const remoteChain = response.blocks;
+        if (remoteChain.length > localChain.length) {
+          fs.writeFileSync('./chain/chain.json', JSON.stringify(remoteChain, null, 2));
+          console.log(`🔄 Synced from ${peer} ✅`);
+        }
+        resolve();
+      });
+    });
   }
-  return true;
 }
