@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load gRPC proto
 const packageDefinition = protoLoader.loadSync(
-  path.resolve(__dirname, 'protos', 'blockchain.proto'),
+  path.resolve(__dirname, 'proto', 'blockchain.proto'),
   {
     keepCase: true,
     longs: String,
