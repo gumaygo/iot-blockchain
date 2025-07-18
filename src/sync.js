@@ -28,6 +28,7 @@ export async function syncChain(localChain) {
         }
 
         const remoteChain = response.chain;
+        console.log(`Peer ${peer} chain length: ${remoteChain.length}`);
         if (remoteChain.length > localChain.length) {
           fs.writeFileSync('./chain/chain.json', JSON.stringify(remoteChain, null, 2));
           console.log(`\ud83d\udd04 Synced from ${peer} \u2705`);

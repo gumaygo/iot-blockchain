@@ -7,6 +7,7 @@ import { getPeers } from './sync.js';
 import axios from 'axios';
 import fs from 'fs';
 import { broadcastBlock } from './grpc-client.js';
+import { syncChain } from './sync.js';
 
 // Setelah block berhasil ditambahkan...
 
@@ -14,6 +15,25 @@ const app = express();
 app.use(express.json());
 
 const blockchain = new Blockchain();
+
+// Otomatis sync ke peer jika chain lokal hanya Genesis Block
+(async () => {
+  if (blockchain.chain.length === 1 && blockchain.chain[0].index === 0) {
+    console.log('⏳ Chain lokal hanya Genesis Block, mencoba sync ke peer...');
+    try {
+      await syncChain(blockchain.chain);
+      // Reload chain dari file setelah sync
+      blockchain.chain = JSON.parse(fs.readFileSync('./chain/chain.json', 'utf-8'));
+      if (blockchain.chain.length > 1) {
+        console.log(`✅ Chain lokal setelah sync: ${blockchain.chain.length} block`);
+      } else {
+        console.log('⚠️ Sync gagal atau semua peer hanya punya Genesis Block.');
+      }
+    } catch (err) {
+      console.error('❌ Error saat sync ke peer:', err.message);
+    }
+  }
+})();
 
 // Endpoint: Tambah data sensor
 app.post('/add-sensor-data', async (req, res) => {
