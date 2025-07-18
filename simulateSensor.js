@@ -18,7 +18,7 @@ const payload = {
   public_key
 };
 
-axios.post('http://172.16.2.253:3000/add-sensor-data', payload)
+axios.post('http://172.16.1.253:3000/add-sensor-data', payload)
   .then((res) => {
     console.log('✅ Sukses kirim data:', res.data);
   })

@@ -51,5 +51,16 @@
     },
     "previousHash": "788f54d826b6c04650e5acceb8e4edd63a0bfc7f1ef86c97b62f35b945f8d34e",
     "hash": "a479b9d79b0116b2ab04b08b0b255b37a983710e8f17cf0651deb3da979af995"
+  },
+  {
+    "index": 5,
+    "timestamp": "2025-07-18T13:20:30.079Z",
+    "data": {
+      "sensor_id": "validator-01",
+      "value": 712.5,
+      "timestamp": "2025-07-18T13:20:30.052Z"
+    },
+    "previousHash": "a479b9d79b0116b2ab04b08b0b255b37a983710e8f17cf0651deb3da979af995",
+    "hash": "94ea74b46bb4cf393a93fca809b15d632490229f6aa206aa711b3baf904fe6b0"
   }
 ]
