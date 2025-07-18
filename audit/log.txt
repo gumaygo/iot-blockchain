@@ -1,3 +1,6 @@
 [2025-07-17T14:50:47.290Z] 🔁 Received block from peer | index: 4
 [2025-07-18T13:20:30.080Z] ✔️ Block accepted from validator-01 | index: 5
 [2025-07-18T13:22:47.053Z] ✔️ Block accepted from validator-01 | index: 6
+[2025-07-18T13:28:00.458Z] ✔️ Block accepted from validator-01 | index: 7
+[2025-07-18T13:28:46.757Z] ✔️ Block accepted from validator-01 | index: 8
+[2025-07-18T13:31:03.083Z] ✔️ Block accepted from validator-01 | index: 9
