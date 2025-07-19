@@ -3,3 +3,4 @@ key/
 snapshot/
 audit/
 blockchain.sqlite
+audit/log.txt
