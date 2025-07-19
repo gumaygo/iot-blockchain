@@ -35,7 +35,7 @@ export class Blockchain {
   initializeDatabase() {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS blocks (
-        index INTEGER PRIMARY KEY,
+        idx INTEGER PRIMARY KEY,
         timestamp TEXT NOT NULL,
         data TEXT NOT NULL,
         previousHash TEXT NOT NULL,
@@ -64,15 +64,15 @@ export class Blockchain {
   }
 
   getLastIndex() {
-    const row = this.db.prepare('SELECT MAX(idx) as maxIdx FROM block').get();
+    const row = this.db.prepare('SELECT MAX(idx) as maxIdx FROM blocks').get();
     return row && row.maxIdx !== null ? row.maxIdx : null;
   }
 
   getLatestBlock() {
-    const row = this.db.prepare('SELECT * FROM block ORDER BY idx DESC LIMIT 1').get();
+    const row = this.db.prepare('SELECT * FROM blocks ORDER BY idx DESC LIMIT 1').get();
     if (!row) {
       // Cek apakah genesis block sudah ada
-      const genesisRow = this.db.prepare('SELECT * FROM block WHERE idx = 0').get();
+      const genesisRow = this.db.prepare('SELECT * FROM blocks WHERE idx = 0').get();
       if (!genesisRow) {
         const genesis = this.createGenesisBlock();
         this._insertBlock(genesis);
@@ -94,7 +94,7 @@ export class Blockchain {
     
     // Cek apakah block dengan index ini sudah ada (prinsip blockchain: tidak overwrite)
     try {
-      const existingBlock = this.db.prepare('SELECT * FROM block WHERE idx = ?').get(newIndex);
+      const existingBlock = this.db.prepare('SELECT * FROM blocks WHERE idx = ?').get(newIndex);
       if (existingBlock) {
         console.warn(`⚠️ Block ${newIndex} already exists, skipping... (blockchain immutability)`);
         return this._rowToBlock(existingBlock);
@@ -119,7 +119,7 @@ export class Blockchain {
     this._insertBlock(newBlock);
     
     // Verify append berhasil
-    const insertedBlock = this.db.prepare('SELECT * FROM block WHERE idx = ?').get(newIndex);
+    const insertedBlock = this.db.prepare('SELECT * FROM blocks WHERE idx = ?').get(newIndex);
     if (!insertedBlock) {
       throw new Error(`Failed to append block ${newIndex}`);
     }
@@ -129,7 +129,7 @@ export class Blockchain {
   }
 
   getChain() {
-    const rows = this.db.prepare('SELECT * FROM block ORDER BY idx ASC').all();
+    const rows = this.db.prepare('SELECT * FROM blocks ORDER BY idx ASC').all();
     const chain = rows.map(row => this._rowToBlock(row));
     
     // Verify chain consistency (tidak ada delete, hanya append)
@@ -148,7 +148,7 @@ export class Blockchain {
   }
 
   _insertBlock(block) {
-    this.db.prepare('INSERT INTO block (idx, timestamp, data, previousHash, hash) VALUES (?, ?, ?, ?, ?)')
+    this.db.prepare('INSERT INTO blocks (idx, timestamp, data, previousHash, hash) VALUES (?, ?, ?, ?, ?)')
       .run(block.index, block.timestamp, JSON.stringify(block.data), block.previousHash, block.hash);
   }
 
@@ -176,7 +176,7 @@ export class Blockchain {
       // Recreate tables
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS blocks (
-          index INTEGER PRIMARY KEY,
+          idx INTEGER PRIMARY KEY,
           timestamp TEXT NOT NULL,
           data TEXT NOT NULL,
           previousHash TEXT NOT NULL,
@@ -192,7 +192,7 @@ export class Blockchain {
       // Insert consistent genesis block
       const genesisBlock = this.createGenesisBlock();
       this.db.prepare(`
-        INSERT INTO blocks (index, timestamp, data, previousHash, hash)
+        INSERT INTO blocks (idx, timestamp, data, previousHash, hash)
         VALUES (?, ?, ?, ?, ?)
       `).run(
         genesisBlock.index,
@@ -242,7 +242,7 @@ export class Blockchain {
           // Only create genesis block if truly isolated
           const genesisBlock = this.createGenesisBlock();
           this.db.prepare(`
-            INSERT INTO blocks (index, timestamp, data, previousHash, hash)
+            INSERT INTO blocks (idx, timestamp, data, previousHash, hash)
             VALUES (?, ?, ?, ?, ?)
           `).run(
             genesisBlock.index,

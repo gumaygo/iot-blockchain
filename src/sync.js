@@ -102,7 +102,7 @@ async function adoptConsensusChain(blockchain, consensusChain) {
   console.log('🔄 Adopting consensus chain...');
   
   // Clear existing blocks (except genesis)
-  blockchain.db.prepare('DELETE FROM block WHERE idx > 0').run();
+        blockchain.db.prepare('DELETE FROM blocks WHERE idx > 0').run();
   
   // Insert consensus blocks
   for (let i = 1; i < consensusChain.length; i++) {
@@ -334,7 +334,7 @@ async function blockchainSync(blockchain, localChain, remoteChain) {
     if (!existingHash) {
       try {
         if (remoteBlock.index > 0) {
-          const prevBlock = blockchain.db.prepare('SELECT * FROM block WHERE idx = ?').get(remoteBlock.index - 1);
+          const prevBlock = blockchain.db.prepare('SELECT * FROM blocks WHERE idx = ?').get(remoteBlock.index - 1);
           if (!prevBlock) {
             console.warn(`⚠️ Block ${remoteBlock.index} previous block missing, skipping`);
             continue;

@@ -92,7 +92,7 @@ async function ReceiveBlock(call, callback) {
   
   // Cek apakah block sudah ada
   try {
-    const existingBlock = blockchain.db.prepare('SELECT * FROM block WHERE idx = ?').get(block.index);
+    const existingBlock = blockchain.db.prepare('SELECT * FROM blocks WHERE idx = ?').get(block.index);
     if (existingBlock) {
       console.log(`ℹ️ Block ${block.index} already exists, skipping...`);
       const chain = blockchain.getChain();
@@ -163,7 +163,7 @@ async function AddBlock(call, callback) {
   
   try {
     // Cek apakah block sudah ada
-    const existingBlock = blockchain.db.prepare('SELECT * FROM block WHERE idx = ?').get(block.index);
+    const existingBlock = blockchain.db.prepare('SELECT * FROM blocks WHERE idx = ?').get(block.index);
     if (existingBlock) {
       console.log(`ℹ️ Block ${block.index} already exists, skipping...`);
       const chain = blockchain.getChain();

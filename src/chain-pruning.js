@@ -44,10 +44,10 @@ export class ChainPruning {
       const archivedBlocks = await this.archiveBlocks(pruneIndex);
       
       // Remove archived blocks from main table
-      this.blockchain.db.prepare('DELETE FROM block WHERE idx < ?').run(pruneIndex);
+      this.blockchain.db.prepare('DELETE FROM blocks WHERE idx < ?').run(pruneIndex);
       
       // Update genesis block to point to first remaining block
-      const firstRemainingBlock = this.blockchain.db.prepare('SELECT * FROM block WHERE idx = ?').get(pruneIndex);
+      const firstRemainingBlock = this.blockchain.db.prepare('SELECT * FROM blocks WHERE idx = ?').get(pruneIndex);
       if (firstRemainingBlock) {
         this.blockchain.db.prepare('UPDATE block SET previousHash = ? WHERE idx = 0').run(firstRemainingBlock.hash);
       }
@@ -75,7 +75,7 @@ export class ChainPruning {
 
   // Archive blocks
   async archiveBlocks(upToIndex) {
-    const blocks = this.blockchain.db.prepare('SELECT * FROM block WHERE idx < ? ORDER BY idx ASC').all(upToIndex);
+    const blocks = this.blockchain.db.prepare('SELECT * FROM blocks WHERE idx < ? ORDER BY idx ASC').all(upToIndex);
     
     let archivedCount = 0;
     const archiveTime = new Date().toISOString();
@@ -106,7 +106,7 @@ export class ChainPruning {
       for (const block of archivedBlocks) {
         try {
           // Check if block already exists
-          const existing = this.blockchain.db.prepare('SELECT * FROM block WHERE idx = ?').get(block.idx);
+          const existing = this.blockchain.db.prepare('SELECT * FROM blocks WHERE idx = ?').get(block.idx);
           if (!existing) {
             this.blockchain.db.prepare(`
               INSERT INTO block (idx, timestamp, data, previousHash, hash) 
@@ -129,9 +129,9 @@ export class ChainPruning {
   getArchiveStats() {
     try {
       const totalArchived = this.blockchain.db.prepare('SELECT COUNT(*) as count FROM block_archive').get();
-      const totalActive = this.blockchain.db.prepare('SELECT COUNT(*) as count FROM block').get();
+      const totalActive = this.blockchain.db.prepare('SELECT COUNT(*) as count FROM blocks').get();
       const archiveSize = this.blockchain.db.prepare('SELECT SUM(LENGTH(data)) as size FROM block_archive').get();
-      const activeSize = this.blockchain.db.prepare('SELECT SUM(LENGTH(data)) as size FROM block').get();
+      const activeSize = this.blockchain.db.prepare('SELECT SUM(LENGTH(data)) as size FROM blocks').get();
       
       return {
         archivedBlocks: totalArchived.count,
