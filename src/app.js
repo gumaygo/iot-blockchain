@@ -7,8 +7,22 @@ import { signData, getPublicKey, verifySignature } from './utils.js';
 const app = express();
 app.use(express.json());
 
-// Inisialisasi blockchain
-const blockchain = await Blockchain.create();
+// Initialize blockchain
+const blockchain = new Blockchain();
+
+// Initialize blockchain asynchronously
+async function initializeApp() {
+  try {
+    await blockchain.initialize();
+    console.log('✅ Blockchain initialized successfully');
+  } catch (error) {
+    console.error('❌ Blockchain initialization failed:', error.message);
+    process.exit(1);
+  }
+}
+
+// Start initialization
+initializeApp();
 
 // Initialize optimizations
 initializeOptimizations(blockchain);
@@ -70,25 +84,23 @@ app.post('/add-sensor-data', async (req, res) => {
     const now = Date.now();
     if (now - lastBroadcastTime < BROADCAST_COOLDOWN) {
       console.log(`⏳ Broadcast cooldown active, skipping broadcast for block ${newBlock.index}`);
-    } else if (isSyncing) {
-      console.log(`⏳ Sync in progress, will broadcast after sync completes for block ${newBlock.index}`);
-      // Schedule broadcast after sync
-      setTimeout(async () => {
-        try {
-          await broadcastBlock(newBlock, blockchain);
-        } catch (error) {
-          console.warn('⚠️ Delayed broadcast failed:', error.message);
-        }
-      }, 2000);
     } else {
-      // Broadcast block baru ke semua peers
+      // Broadcast block baru ke semua peers (langsung, tidak menunggu sync)
       try {
         console.log(`🔄 Starting broadcast for block ${newBlock.index}...`);
         lastBroadcastTime = now;
-        await broadcastBlock(newBlock, blockchain);
-        console.log(`✅ Broadcast completed for block ${newBlock.index}`);
+        
+        // Broadcast dalam background agar tidak blocking
+        setImmediate(async () => {
+          try {
+            await broadcastBlock(newBlock, blockchain);
+            console.log(`✅ Broadcast completed for block ${newBlock.index}`);
+          } catch (error) {
+            console.warn('⚠️ Background broadcast failed:', error.message);
+          }
+        });
       } catch (error) {
-        console.warn('⚠️ Broadcast failed:', error.message);
+        console.warn('⚠️ Broadcast setup failed:', error.message);
       }
     }
 
@@ -246,6 +258,35 @@ app.get('/prune/search', (req, res) => {
   }
 });
 
+// Reset database endpoint
+app.post('/reset-database', async (req, res) => {
+  try {
+    console.log('🔄 Reset database requested...');
+    const success = await blockchain.resetDatabase();
+    
+    if (success) {
+      console.log('✅ Database reset successful');
+      res.json({ 
+        success: true, 
+        message: 'Database reset successful',
+        genesisHash: blockchain.getLatestBlock().hash
+      });
+    } else {
+      console.error('❌ Database reset failed');
+      res.status(500).json({ 
+        success: false, 
+        message: 'Database reset failed' 
+      });
+    }
+  } catch (error) {
+    console.error('❌ Reset database error:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
 // Start REST API server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
@@ -255,31 +296,61 @@ app.listen(PORT, () => {
 // Import dan start gRPC server
 import './grpc-server.js';
 
-// Auto sync setiap 15 detik dengan sync lock
-setInterval(async () => {
+// Sync bersamaan setiap 30 detik (detik 00 dan 30)
+function scheduleSyncAtMinute() {
+  const now = new Date();
+  const seconds = now.getSeconds();
+  const milliseconds = now.getMilliseconds();
+  
+  // Hitung waktu sampai sync berikutnya
+  let delay;
+  if (seconds < 30) {
+    // Sync di detik 30
+    delay = (30 - seconds) * 1000 - milliseconds;
+  } else {
+    // Sync di detik 00 (menit berikutnya)
+    delay = (60 - seconds) * 1000 - milliseconds;
+  }
+  
+  console.log(`⏰ Next sync scheduled in ${Math.round(delay/1000)} seconds`);
+  
+  setTimeout(() => {
+    // Jalankan sync
+    performScheduledSync();
+    
+    // Schedule sync berikutnya
+    scheduleSyncAtMinute();
+  }, delay);
+}
+
+// Fungsi sync terjadwal
+async function performScheduledSync() {
   if (isSyncing) {
-    console.log('⏳ Sync already in progress, skipping...');
+    console.log('⏳ Sync already in progress, skipping scheduled sync...');
     return;
   }
   
   try {
     isSyncing = true;
-    console.log('🔄 Starting auto sync...');
+    console.log('🔄 Starting scheduled sync (every 30 seconds)...');
     
     // Set timeout for sync lock
     syncTimeout = setTimeout(() => {
       console.warn('⏰ Sync timeout, clearing lock');
       clearSyncLock();
-    }, 10000); // 10 detik timeout
+    }, 5000); // 5 detik timeout
     
     await syncChain(blockchain);
-    console.log('✅ Auto sync completed');
+    console.log('✅ Scheduled sync completed');
   } catch (error) {
-    console.error('❌ Auto sync error:', error.message);
+    console.error('❌ Scheduled sync error:', error.message);
   } finally {
     clearSyncLock();
   }
-}, 15000); // Kurangi dari 30 detik ke 15 detik
+}
+
+// Mulai sync terjadwal
+scheduleSyncAtMinute();
 
 // Auto chain pruning setiap 6 jam
 setInterval(async () => {

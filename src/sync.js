@@ -37,97 +37,63 @@ export function getPeers() {
 }
 
 export async function syncChain(blockchain) {
-  if (!consensusManager || !peerDiscovery || !chainValidator) {
-    console.warn('⚠️ Optimizations not initialized, using fallback sync');
-    return await fallbackSync(blockchain);
-  }
-
-  const localChain = blockchain.getChain();
-  let hasChanges = false;
-  const remoteChains = [];
-  
-  // Get healthy peers only
-  const healthyPeers = peerDiscovery.getHealthyPeers();
-  console.log(`🔗 Syncing with ${healthyPeers.length} healthy peers`);
-  
-  for (const peer of healthyPeers) {
-    const client = new BlockchainService(peer, credentials);
-    console.log(`🔗 Sync ke peer: ${peer}`);
-    
-    try {
-      const response = await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('Sync timeout'));
-        }, 5000);
-
-        client.GetBlockchain({}, (err, response) => {
-          clearTimeout(timeout);
-          if (err) {
-            reject(err);
-          } else {
-            resolve(response);
-          }
-        });
-      });
-
-      const remoteChain = response.chain;
-      console.log(`Peer ${peer} chain length: ${remoteChain.length}`);
-      
-      // Validate chain using Merkle tree
-      if (remoteChain.length > 0) {
-        console.log(`🔍 Validating remote chain from ${peer} with Merkle tree...`);
-        
-        // Use simple validation for chains < 20 blocks, Merkle for larger chains
-        let isValid;
-        if (remoteChain.length < 20) {
-          console.log(`ℹ️ Using simple validation for chain (${remoteChain.length} blocks)`);
-          isValid = chainValidator.validateChainSimple(remoteChain);
-        } else {
-          console.log(`🌳 Using Merkle tree validation for large chain (${remoteChain.length} blocks)`);
-          isValid = chainValidator.validateChainWithMerkle(remoteChain);
-        }
-        
-        console.log(`✅ Remote chain validation result: ${isValid}`);
-        
-        if (isValid) {
-          remoteChains.push(remoteChain);
-        } else {
-          console.warn('⚠️ Remote chain invalid, skipping...');
-        }
-      }
-      
-    } catch (error) {
-      console.warn(`❌ Failed to sync from ${peer}:`, error.message);
-      // Mark peer as unhealthy
-      peerDiscovery.peers.set(peer, {
-        ...peerDiscovery.peers.get(peer),
-        health: 'unhealthy',
-        lastSeen: Date.now()
-      });
+  try {
+    // Check if database is empty
+    const blockCount = blockchain.db.prepare('SELECT COUNT(*) as count FROM blocks').get();
+    if (blockCount.count === 0) {
+      console.log('📋 Database is empty, attempting to sync from network...');
     }
-  }
-  
-  if (remoteChains.length === 0) {
-    console.log('ℹ️ No valid remote chains available for sync');
-    return;
-  }
-  
-  // Use consensus to resolve conflicts
-  console.log('🔍 Applying consensus algorithm...');
-  const consensusChain = await consensusManager.resolveChainConflict(localChain, remoteChains);
-  
-  if (consensusChain !== localChain) {
-    console.log('🔄 Consensus decided to adopt remote chain');
-    await adoptConsensusChain(blockchain, consensusChain);
-    hasChanges = true;
-  } else {
-    console.log('✅ Consensus decided to keep local chain');
-  }
-  
-  if (hasChanges) {
-    console.log(`🔄 Optimized sync completed with consensus`);
-  } else {
-    console.log(`ℹ️ Optimized sync completed - all nodes in consensus`);
+    
+    console.log('🔄 Syncing with healthy peers...');
+    const peers = await getHealthyPeers();
+    
+    if (peers.length === 0) {
+      console.log('⚠️ No healthy peers available for sync');
+      throw new Error('No healthy peers available');
+    }
+    
+    console.log(`🔄 Syncing with ${peers.length} healthy peers`);
+    
+    const remoteChains = [];
+    
+    for (const peer of peers) {
+      try {
+        console.log(`🔄 Sync ke peer: ${peer}`);
+        const remoteChain = await getRemoteChain(peer);
+        
+        if (remoteChain && remoteChain.length > 0) {
+          console.log(`Peer ${peer} chain length: ${remoteChain.length}`);
+          remoteChains.push(remoteChain);
+        }
+      } catch (error) {
+        console.error(`❌ Failed to sync from ${peer}:`, error.message);
+      }
+    }
+    
+    if (remoteChains.length === 0) {
+      console.log('⚠️ No valid remote chains received');
+      throw new Error('No valid remote chains received');
+    }
+    
+    console.log(`✅ Received ${remoteChains.length} remote chains`);
+    
+    // Apply consensus algorithm
+    const consensusManager = new ConsensusManager();
+    const localChain = blockchain.getChain();
+    const consensusChain = await consensusManager.resolveChainConflict(localChain, remoteChains);
+    
+    // Apply consensus result
+    if (consensusChain !== localChain) {
+      console.log('🔄 Consensus decided to adopt remote chain');
+      await blockchain.replaceChain(consensusChain);
+    } else {
+      console.log('✅ Consensus decided to keep local chain');
+    }
+    
+    console.log('✅ Sync completed successfully');
+  } catch (error) {
+    console.error('❌ Sync failed:', error.message);
+    throw error;
   }
 }
 
@@ -451,5 +417,53 @@ function validateChain(chain) {
     }
   }
   return true;
+}
+
+// Helper function untuk get healthy peers
+async function getHealthyPeers() {
+  const peers = [
+    '172.16.1.253:50051',
+    '172.16.2.253:50051', 
+    '172.16.2.254:50051'
+  ];
+  
+  const healthyPeers = [];
+  
+  for (const peer of peers) {
+    try {
+      const client = new BlockchainService(peer, credentials);
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Health check timeout')), 3000);
+        client.GetBlockchain({}, (err) => {
+          clearTimeout(timeout);
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+      healthyPeers.push(peer);
+    } catch (error) {
+      console.log(`❌ Peer ${peer} unhealthy: ${error.message}`);
+    }
+  }
+  
+  return healthyPeers;
+}
+
+// Helper function untuk get remote chain
+async function getRemoteChain(peer) {
+  const client = new BlockchainService(peer, credentials);
+  
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Sync timeout')), 5000);
+    
+    client.GetBlockchain({}, (err, response) => {
+      clearTimeout(timeout);
+      if (err) {
+        reject(err);
+      } else {
+        resolve(response.chain || []);
+      }
+    });
+  });
 }
 

@@ -19,9 +19,10 @@ export class Block {
 }
 
 export class Blockchain {
-  constructor(db) {
-    this.db = db;
-    this._initTable();
+  constructor() {
+    this.db = new Database('blockchain.sqlite');
+    this.initializeDatabase();
+    this.initialize(); // Panggil initialize untuk logic genesis block
   }
 
   static async create() {
@@ -31,14 +32,21 @@ export class Blockchain {
     return blockchain;
   }
 
-  _initTable() {
-    this.db.prepare(`CREATE TABLE IF NOT EXISTS block (
-      idx INTEGER PRIMARY KEY,
-      timestamp TEXT NOT NULL,
-      data TEXT NOT NULL,
-      previousHash TEXT NOT NULL,
-      hash TEXT NOT NULL
-    )`).run();
+  initializeDatabase() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS blocks (
+        index INTEGER PRIMARY KEY,
+        timestamp TEXT NOT NULL,
+        data TEXT NOT NULL,
+        previousHash TEXT NOT NULL,
+        hash TEXT NOT NULL UNIQUE
+      );
+      
+      CREATE TABLE IF NOT EXISTS chain_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
   }
 
   async init() {
@@ -152,5 +160,114 @@ export class Blockchain {
       row.previousHash,
       row.hash
     );
+  }
+
+  // Reset database untuk genesis block konsisten
+  async resetDatabase() {
+    try {
+      console.log('🔄 Resetting database for consistent genesis block...');
+      
+      // Drop existing tables
+      this.db.exec(`
+        DROP TABLE IF EXISTS blocks;
+        DROP TABLE IF EXISTS chain_metadata;
+      `);
+      
+      // Recreate tables
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS blocks (
+          index INTEGER PRIMARY KEY,
+          timestamp TEXT NOT NULL,
+          data TEXT NOT NULL,
+          previousHash TEXT NOT NULL,
+          hash TEXT NOT NULL UNIQUE
+        );
+        
+        CREATE TABLE IF NOT EXISTS chain_metadata (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
+      `);
+      
+      // Insert consistent genesis block
+      const genesisBlock = this.createGenesisBlock();
+      this.db.prepare(`
+        INSERT INTO blocks (index, timestamp, data, previousHash, hash)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        genesisBlock.index,
+        genesisBlock.timestamp,
+        JSON.stringify(genesisBlock.data),
+        genesisBlock.previousHash,
+        genesisBlock.hash
+      );
+      
+      // Reset chain metadata
+      this.db.prepare(`
+        INSERT OR REPLACE INTO chain_metadata (key, value)
+        VALUES (?, ?)
+      `).run('last_block_index', '0');
+      
+      console.log('✅ Database reset completed with consistent genesis block');
+      console.log(`📋 Genesis block hash: ${genesisBlock.hash}`);
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Database reset failed:', error.message);
+      return false;
+    }
+  }
+
+  async initialize() {
+    try {
+      console.log('🔄 Initializing blockchain...');
+      
+      // Check if database is empty
+      const blockCount = this.db.prepare('SELECT COUNT(*) as count FROM blocks').get();
+      const isEmpty = blockCount.count === 0;
+      
+      if (isEmpty) {
+        console.log('📋 Database is empty, checking network connectivity...');
+        
+        // Try to sync with other nodes first
+        try {
+          const { syncChain } = await import('./sync.js');
+          await syncChain(this);
+          console.log('✅ Successfully synced with network, no genesis block needed');
+          return;
+        } catch (syncError) {
+          console.log('⚠️ Cannot sync with network:', syncError.message);
+          console.log('🔄 Creating genesis block for isolated node...');
+          
+          // Only create genesis block if truly isolated
+          const genesisBlock = this.createGenesisBlock();
+          this.db.prepare(`
+            INSERT INTO blocks (index, timestamp, data, previousHash, hash)
+            VALUES (?, ?, ?, ?, ?)
+          `).run(
+            genesisBlock.index,
+            genesisBlock.timestamp,
+            JSON.stringify(genesisBlock.data),
+            genesisBlock.previousHash,
+            genesisBlock.hash
+          );
+          
+          this.db.prepare(`
+            INSERT OR REPLACE INTO chain_metadata (key, value)
+            VALUES (?, ?)
+          `).run('last_block_index', '0');
+          
+          console.log('✅ Genesis block created for isolated node');
+          console.log(`📋 Genesis block hash: ${genesisBlock.hash}`);
+        }
+      } else {
+        console.log('✅ Database already contains blocks, skipping genesis creation');
+      }
+      
+      console.log('✅ Blockchain initialization completed');
+    } catch (error) {
+      console.error('❌ Blockchain initialization failed:', error.message);
+      throw error;
+    }
   }
 }
