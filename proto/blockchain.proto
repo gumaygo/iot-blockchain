@@ -5,6 +5,7 @@ package blockchain;
 service Blockchain {
   rpc GetBlockchain (Empty) returns (BlockchainResponse);
   rpc ReceiveBlock (Block) returns (BlockchainResponse);
+  rpc AddBlock (Block) returns (BlockchainResponse);
 }
 
 message Empty {}

@@ -1,6 +1,7 @@
 import express from 'express';
 import { Blockchain } from './blockchain.js';
-import { syncChain, broadcastBlock } from './sync.js';
+import { syncChain, broadcastBlock, initializeOptimizations } from './sync.js';
+import { ChainPruning } from './chain-pruning.js';
 import { signData, getPublicKey, verifySignature } from './utils.js';
 
 const app = express();
@@ -9,9 +10,15 @@ app.use(express.json());
 // Inisialisasi blockchain
 const blockchain = await Blockchain.create();
 
+// Initialize optimizations
+initializeOptimizations(blockchain);
+
+// Initialize chain pruning
+const chainPruning = new ChainPruning(blockchain);
+
 // Rate limiting untuk broadcast
 let lastBroadcastTime = 0;
-const BROADCAST_COOLDOWN = 2000; // 2 detik cooldown (dinaikkan)
+const BROADCAST_COOLDOWN = 2000; // 2 detik cooldown
 
 // Sync lock untuk mencegah konflik
 let isSyncing = false;
@@ -58,7 +65,7 @@ app.post('/add-sensor-data', async (req, res) => {
       try {
         console.log(`🔄 Starting broadcast for block ${newBlock.index}...`);
         lastBroadcastTime = now;
-        await broadcastBlock(newBlock);
+        await broadcastBlock(newBlock, blockchain);
         console.log(`✅ Broadcast completed for block ${newBlock.index}`);
       } catch (error) {
         console.warn('⚠️ Broadcast failed:', error.message);
@@ -102,6 +109,123 @@ app.post('/sync', async (req, res) => {
   }
 });
 
+// New API endpoints for optimizations
+app.get('/peers/status', async (req, res) => {
+  try {
+    const { getPeers } = await import('./sync.js');
+    const peers = getPeers();
+    res.json({ 
+      peers,
+      count: peers.length,
+      message: 'Peer status retrieved'
+    });
+  } catch (error) {
+    console.error('❌ Error getting peer status:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/consensus/status', (req, res) => {
+  try {
+    const chain = blockchain.getChain();
+    res.json({ 
+      chainLength: chain.length,
+      merkleRoot: chain.length > 0 ? 'calculated' : 'none',
+      consensus: 'active',
+      message: 'Consensus status retrieved'
+    });
+  } catch (error) {
+    console.error('❌ Error getting consensus status:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Chain pruning endpoints
+app.post('/prune/chain', async (req, res) => {
+  try {
+    await chainPruning.pruneChain();
+    const stats = chainPruning.getArchiveStats();
+    res.json({ 
+      message: 'Chain pruning completed',
+      stats
+    });
+  } catch (error) {
+    console.error('❌ Error during chain pruning:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/prune/stats', (req, res) => {
+  try {
+    const stats = chainPruning.getArchiveStats();
+    res.json({ 
+      stats,
+      message: 'Archive statistics retrieved'
+    });
+  } catch (error) {
+    console.error('❌ Error getting archive stats:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/prune/restore', async (req, res) => {
+  try {
+    await chainPruning.restoreArchivedBlocks();
+    res.json({ 
+      message: 'Archived blocks restored'
+    });
+  } catch (error) {
+    console.error('❌ Error restoring archived blocks:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/prune/compact', async (req, res) => {
+  try {
+    const { maxAge } = req.body;
+    chainPruning.compactArchive(maxAge);
+    res.json({ 
+      message: 'Archive compacted'
+    });
+  } catch (error) {
+    console.error('❌ Error compacting archive:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/prune/block/:index', (req, res) => {
+  try {
+    const index = parseInt(req.params.index);
+    const block = chainPruning.getArchivedBlock(index);
+    if (block) {
+      res.json({ block });
+    } else {
+      res.status(404).json({ error: 'Block not found in archive' });
+    }
+  } catch (error) {
+    console.error('❌ Error getting archived block:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/prune/search', (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query) {
+      return res.status(400).json({ error: 'Query parameter required' });
+    }
+    const blocks = chainPruning.searchArchivedBlocks(query);
+    res.json({ 
+      blocks,
+      count: blocks.length,
+      query
+    });
+  } catch (error) {
+    console.error('❌ Error searching archived blocks:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start REST API server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
@@ -130,4 +254,14 @@ setInterval(async () => {
   }
 }, 30000);
 
-console.log('✅ Aplikasi blockchain IoT berhasil dimulai!'); 
+// Auto chain pruning setiap 6 jam
+setInterval(async () => {
+  try {
+    console.log('🗑️ Checking for chain pruning...');
+    await chainPruning.pruneChain();
+  } catch (error) {
+    console.error('❌ Auto pruning error:', error.message);
+  }
+}, 6 * 60 * 60 * 1000);
+
+console.log('✅ Aplikasi blockchain IoT berhasil dimulai dengan optimizations dan pruning!'); 

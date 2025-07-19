@@ -145,10 +145,50 @@ async function ReceiveBlock(call, callback) {
   }
 }
 
+async function AddBlock(call, callback) {
+  const block = call.request;
+  
+  console.log(`📥 AddBlock called for block ${block.index} from peer`);
+  
+  // Parse data dari string JSON ke object
+  let parsedData;
+  try {
+    parsedData = JSON.parse(block.data);
+  } catch (e) {
+    console.warn(`❌ Invalid JSON data in block ${block.index}:`, e.message);
+    return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid JSON data' });
+  }
+  
+  await blockchain.init();
+  
+  try {
+    // Cek apakah block sudah ada
+    const existingBlock = blockchain.db.prepare('SELECT * FROM block WHERE idx = ?').get(block.index);
+    if (existingBlock) {
+      console.log(`ℹ️ Block ${block.index} already exists, skipping...`);
+      const chain = blockchain.getChain();
+      const protoChain = convertChainToProto(chain);
+      return callback(null, { chain: protoChain });
+    }
+    
+    // Add block
+    blockchain.addBlock(parsedData);
+    const chain = blockchain.getChain();
+    const protoChain = convertChainToProto(chain);
+    
+    console.log(`✅ Block ${block.index} added successfully via AddBlock`);
+    callback(null, { chain: protoChain });
+  } catch (e) {
+    console.error(`❌ Error adding block ${block.index}:`, e.message);
+    callback({ code: grpc.status.INTERNAL, message: e.message });
+  }
+}
+
 const server = new grpc.Server();
 server.addService(blockchainProto.Blockchain.service, {
   GetBlockchain: (call, callback) => { GetBlockchain(call, callback); },
-  ReceiveBlock: (call, callback) => { ReceiveBlock(call, callback); }
+  ReceiveBlock: (call, callback) => { ReceiveBlock(call, callback); },
+  AddBlock: (call, callback) => { AddBlock(call, callback); }
 });
 
 server.bindAsync('0.0.0.0:50051', credentials, () => {
