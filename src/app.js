@@ -18,10 +18,20 @@ const chainPruning = new ChainPruning(blockchain);
 
 // Rate limiting untuk broadcast
 let lastBroadcastTime = 0;
-const BROADCAST_COOLDOWN = 2000; // 2 detik cooldown
+const BROADCAST_COOLDOWN = 1000; // 1 detik cooldown (dikurangi)
 
 // Sync lock untuk mencegah konflik
 let isSyncing = false;
+let syncTimeout = null;
+
+// Clear sync lock after timeout
+function clearSyncLock() {
+  isSyncing = false;
+  if (syncTimeout) {
+    clearTimeout(syncTimeout);
+    syncTimeout = null;
+  }
+}
 
 // REST API Routes
 app.get('/blockchain', async (req, res) => {
@@ -58,8 +68,18 @@ app.post('/add-sensor-data', async (req, res) => {
 
     // Rate limiting untuk broadcast dengan sync lock
     const now = Date.now();
-    if (now - lastBroadcastTime < BROADCAST_COOLDOWN || isSyncing) {
-      console.log(`⏳ Broadcast cooldown/sync active, skipping broadcast for block ${newBlock.index}`);
+    if (now - lastBroadcastTime < BROADCAST_COOLDOWN) {
+      console.log(`⏳ Broadcast cooldown active, skipping broadcast for block ${newBlock.index}`);
+    } else if (isSyncing) {
+      console.log(`⏳ Sync in progress, will broadcast after sync completes for block ${newBlock.index}`);
+      // Schedule broadcast after sync
+      setTimeout(async () => {
+        try {
+          await broadcastBlock(newBlock, blockchain);
+        } catch (error) {
+          console.warn('⚠️ Delayed broadcast failed:', error.message);
+        }
+      }, 2000);
     } else {
       // Broadcast block baru ke semua peers
       try {
@@ -235,7 +255,7 @@ app.listen(PORT, () => {
 // Import dan start gRPC server
 import './grpc-server.js';
 
-// Auto sync setiap 30 detik dengan sync lock
+// Auto sync setiap 15 detik dengan sync lock
 setInterval(async () => {
   if (isSyncing) {
     console.log('⏳ Sync already in progress, skipping...');
@@ -245,14 +265,21 @@ setInterval(async () => {
   try {
     isSyncing = true;
     console.log('🔄 Starting auto sync...');
+    
+    // Set timeout for sync lock
+    syncTimeout = setTimeout(() => {
+      console.warn('⏰ Sync timeout, clearing lock');
+      clearSyncLock();
+    }, 10000); // 10 detik timeout
+    
     await syncChain(blockchain);
     console.log('✅ Auto sync completed');
   } catch (error) {
     console.error('❌ Auto sync error:', error.message);
   } finally {
-    isSyncing = false;
+    clearSyncLock();
   }
-}, 30000);
+}, 15000); // Kurangi dari 30 detik ke 15 detik
 
 // Auto chain pruning setiap 6 jam
 setInterval(async () => {

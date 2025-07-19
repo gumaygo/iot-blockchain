@@ -31,6 +31,12 @@ export class ConsensusManager {
     console.log(`📊 Local chain length: ${localChain.length}`);
     console.log(`📊 Valid remote chains: ${validRemoteChains.length}`);
     
+    // If no remote chains, keep local
+    if (validRemoteChains.length === 0) {
+      console.log('✅ No valid remote chains, keeping local chain');
+      return localChain;
+    }
+    
     const allChains = [localChain, ...validRemoteChains];
     const validChains = allChains.filter(chain => {
       if (!chain || !Array.isArray(chain)) {
@@ -61,6 +67,12 @@ export class ConsensusManager {
       return localChain;
     }
     
+    // If local chain is the longest, keep it
+    if (longestChain === localChain) {
+      console.log('✅ Local chain is longest, keeping it');
+      return localChain;
+    }
+    
     // If longest chain is significantly longer, adopt it
     if (secondLongest && longestChain.length > secondLongest.length + 2) {
       console.log(`✅ Adopting longest chain (${longestChain.length} vs ${secondLongest.length})`);
@@ -84,8 +96,15 @@ export class ConsensusManager {
       return localChain;
     }
     
-    console.log(`✅ Adopting consensus chain (${longestChain.length} blocks)`);
-    return longestChain;
+    // Only adopt remote if it's clearly better
+    if (longestChain.length > localChain.length) {
+      console.log(`✅ Adopting consensus chain (${longestChain.length} vs ${localChain.length})`);
+      return longestChain;
+    }
+    
+    // Default: keep local chain
+    console.log('✅ Keeping local chain (no clear consensus winner)');
+    return localChain;
   }
 
   // Calculate chain hash for tiebreaker

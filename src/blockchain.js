@@ -51,6 +51,7 @@ export class Blockchain {
   }
 
   createGenesisBlock() {
+    // Use fixed timestamp for consistent genesis block across all nodes
     return new Block(0, '2023-01-01T00:00:00.000Z', { message: 'Genesis Block' }, '0');
   }
 
