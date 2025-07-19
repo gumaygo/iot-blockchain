@@ -101,6 +101,9 @@ export async function broadcastBlock(block) {
         resolve();
       });
     });
+    
+    // Delay kecil untuk mengurangi race condition
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
 }
 

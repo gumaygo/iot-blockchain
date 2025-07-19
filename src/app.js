@@ -36,13 +36,17 @@ app.post('/add-sensor-data', async (req, res) => {
       return res.status(401).json({ error: 'Invalid signature' });
     }
 
+    console.log(`📝 Adding new sensor data: ${sensor_id} = ${value}`);
+    
     // Tambah block ke blockchain
     const newBlock = blockchain.addBlock({ sensor_id, value, timestamp });
     console.log(`✅ Block baru ditambahkan: ${newBlock.index}`);
 
     // Broadcast block baru ke semua peers
     try {
+      console.log(`🔄 Starting broadcast for block ${newBlock.index}...`);
       await broadcastBlock(newBlock);
+      console.log(`✅ Broadcast completed for block ${newBlock.index}`);
     } catch (error) {
       console.warn('⚠️ Broadcast failed:', error.message);
     }

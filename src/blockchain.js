@@ -62,31 +62,45 @@ export class Blockchain {
   getLatestBlock() {
     const row = this.db.prepare('SELECT * FROM block ORDER BY idx DESC LIMIT 1').get();
     if (!row) {
-      const genesis = this.createGenesisBlock();
-      this._insertBlock(genesis);
-      return genesis;
+      // Cek apakah genesis block sudah ada
+      const genesisRow = this.db.prepare('SELECT * FROM block WHERE idx = 0').get();
+      if (!genesisRow) {
+        const genesis = this.createGenesisBlock();
+        this._insertBlock(genesis);
+        return genesis;
+      }
+      return this._rowToBlock(genesisRow);
     }
     return this._rowToBlock(row);
   }
 
   addBlock(data) {
-    let lastIndex = this.getLastIndex();
-    if (lastIndex === null) {
-      const genesis = this.createGenesisBlock();
-      this._insertBlock(genesis);
-      lastIndex = 0;
-    }
-    const lastBlock = this.getLatestBlock();
     // Validasi data block
     if (!data || typeof data !== 'object' || typeof data.sensor_id !== 'string' || typeof data.value !== 'number' || typeof data.timestamp !== 'string') {
       throw new Error('Invalid block data');
     }
+    
+    const lastBlock = this.getLatestBlock();
+    const newIndex = lastBlock.index + 1;
+    
+    // Cek apakah block dengan index ini sudah ada
+    try {
+      const existingBlock = this.db.prepare('SELECT * FROM block WHERE idx = ?').get(newIndex);
+      if (existingBlock) {
+        console.warn(`⚠️ Block ${newIndex} already exists, skipping...`);
+        return this._rowToBlock(existingBlock);
+      }
+    } catch (e) {
+      // Block tidak ada, lanjutkan
+    }
+    
     const newBlock = new Block(
-      lastBlock.index + 1,
+      newIndex,
       new Date().toISOString(),
       data,
       lastBlock.hash
     );
+    
     this._insertBlock(newBlock);
     return newBlock;
   }

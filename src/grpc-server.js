@@ -56,19 +56,26 @@ async function GetBlockchain(call, callback) {
 async function ReceiveBlock(call, callback) {
   const block = call.request;
   
+  console.log(`📥 Received block ${block.index} from peer`);
+  
   // Parse data dari string JSON ke object
   let parsedData;
   try {
     parsedData = JSON.parse(block.data);
   } catch (e) {
+    console.warn(`❌ Invalid JSON data in block ${block.index}:`, e.message);
     return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid JSON data' });
   }
   
   await blockchain.init();
   const latest = blockchain.getLatestBlock();
   
+  console.log(`📊 Local latest block: ${latest.index}, received block: ${block.index}`);
+  console.log(`🔗 Latest hash: ${latest.hash}, received previousHash: ${block.previousHash}`);
+  
   // Validasi struktur block
   if (typeof block !== 'object' || block === null || typeof block.index !== 'number' || typeof block.previousHash !== 'string' || typeof block.hash !== 'string' || typeof block.data !== 'string') {
+    console.warn(`❌ Invalid block structure for block ${block.index}`);
     return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid block structure' });
   }
   
@@ -77,21 +84,40 @@ async function ReceiveBlock(call, callback) {
     .update(block.index + block.timestamp + block.data + block.previousHash) // Gunakan data string asli
     .digest('hex');
   if (block.hash !== expectedHash) {
+    console.warn(`❌ Invalid block hash for block ${block.index}`);
+    console.warn(`Expected: ${expectedHash}`);
+    console.warn(`Got: ${block.hash}`);
     return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid block hash' });
   }
   
-  if (block.index === latest.index + 1 && block.previousHash === latest.hash) {
-    try {
-      blockchain.addBlock(parsedData); // Gunakan data yang sudah di-parse
-      const chain = blockchain.getChain();
-      const protoChain = convertChainToProto(chain);
-      
-      callback(null, { chain: protoChain });
-    } catch (e) {
-      callback({ code: grpc.status.INTERNAL, message: e.message });
-    }
-  } else {
-    callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid block sequence' });
+  // Validasi sequence - lebih fleksibel untuk race condition
+  if (block.index > latest.index + 1) {
+    console.warn(`❌ Block ${block.index} is too far ahead (latest: ${latest.index})`);
+    return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Block too far ahead' });
+  }
+  
+  if (block.index <= latest.index) {
+    console.warn(`❌ Block ${block.index} already exists or is behind (latest: ${latest.index})`);
+    return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Block already exists or is behind' });
+  }
+  
+  if (block.previousHash !== latest.hash) {
+    console.warn(`❌ Block ${block.index} previousHash mismatch`);
+    console.warn(`Expected: ${latest.hash}`);
+    console.warn(`Got: ${block.previousHash}`);
+    return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid previousHash' });
+  }
+  
+  try {
+    blockchain.addBlock(parsedData); // Gunakan data yang sudah di-parse
+    const chain = blockchain.getChain();
+    const protoChain = convertChainToProto(chain);
+    
+    console.log(`✅ Block ${block.index} added successfully`);
+    callback(null, { chain: protoChain });
+  } catch (e) {
+    console.error(`❌ Error adding block ${block.index}:`, e.message);
+    callback({ code: grpc.status.INTERNAL, message: e.message });
   }
 }
 
