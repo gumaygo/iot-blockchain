@@ -1,6 +1,6 @@
 import express from 'express';
 import { Blockchain } from './blockchain.js';
-import { syncChain } from './sync.js';
+import { syncChain, broadcastBlock } from './sync.js';
 import { signData, getPublicKey, verifySignature } from './utils.js';
 
 const app = express();
@@ -39,6 +39,13 @@ app.post('/add-sensor-data', async (req, res) => {
     // Tambah block ke blockchain
     const newBlock = blockchain.addBlock({ sensor_id, value, timestamp });
     console.log(`✅ Block baru ditambahkan: ${newBlock.index}`);
+
+    // Broadcast block baru ke semua peers
+    try {
+      await broadcastBlock(newBlock);
+    } catch (error) {
+      console.warn('⚠️ Broadcast failed:', error.message);
+    }
 
     res.json({ 
       message: 'Block added successfully', 
