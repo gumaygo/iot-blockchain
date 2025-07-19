@@ -24,10 +24,8 @@ const packageDefinition = protoLoader.loadSync(
 const grpcObject = grpc.loadPackageDefinition(packageDefinition);
 const BlockchainService = grpcObject.blockchain.Blockchain;
 
-const ca = fs.readFileSync('./key/ca.crt');
-const clientKey = fs.readFileSync('./key/client.key');
-const clientCert = fs.readFileSync('./key/client.crt');
 // Use client credentials from grpc-server
+const credentials = clientCredentials;
 
 // Initialize optimization components
 let consensusManager = null;
