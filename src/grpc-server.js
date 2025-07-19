@@ -90,15 +90,23 @@ async function ReceiveBlock(call, callback) {
     return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid block hash' });
   }
   
+  // Cek apakah block sudah ada
+  try {
+    const existingBlock = blockchain.db.prepare('SELECT * FROM block WHERE idx = ?').get(block.index);
+    if (existingBlock) {
+      console.log(`ℹ️ Block ${block.index} already exists, skipping...`);
+      const chain = blockchain.getChain();
+      const protoChain = convertChainToProto(chain);
+      return callback(null, { chain: protoChain });
+    }
+  } catch (e) {
+    // Block tidak ada, lanjutkan
+  }
+  
   // Validasi sequence - lebih fleksibel untuk race condition
   if (block.index > latest.index + 1) {
     console.warn(`❌ Block ${block.index} is too far ahead (latest: ${latest.index})`);
     return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Block too far ahead' });
-  }
-  
-  if (block.index <= latest.index) {
-    console.warn(`❌ Block ${block.index} already exists or is behind (latest: ${latest.index})`);
-    return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Block already exists or is behind' });
   }
   
   if (block.previousHash !== latest.hash) {

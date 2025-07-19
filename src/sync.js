@@ -85,6 +85,33 @@ export async function broadcastBlock(block) {
   
   for (const peer of peers) {
     const client = new BlockchainService(peer, credentials);
+    
+    // Cek apakah peer sudah punya block ini
+    try {
+      const response = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Timeout checking peer chain'));
+        }, 2000);
+        
+        client.GetBlockchain({}, (err, response) => {
+          clearTimeout(timeout);
+          if (err) {
+            reject(err);
+          } else {
+            resolve(response);
+          }
+        });
+      });
+      
+      const peerChainLength = response.chain.length;
+      if (peerChainLength > block.index) {
+        console.log(`⏭️ Skipping ${peer} - already has block ${block.index} (chain length: ${peerChainLength})`);
+        continue;
+      }
+    } catch (e) {
+      console.warn(`⚠️ Could not check ${peer} chain, proceeding with broadcast:`, e.message);
+    }
+    
     await new Promise((resolve) => {
       const timeout = setTimeout(() => {
         console.warn(`⏰ Timeout broadcast ke ${peer}`);

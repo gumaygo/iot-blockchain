@@ -9,6 +9,10 @@ app.use(express.json());
 // Inisialisasi blockchain
 const blockchain = await Blockchain.create();
 
+// Rate limiting untuk broadcast
+let lastBroadcastTime = 0;
+const BROADCAST_COOLDOWN = 1000; // 1 detik cooldown
+
 // REST API Routes
 app.get('/blockchain', async (req, res) => {
   try {
@@ -42,13 +46,20 @@ app.post('/add-sensor-data', async (req, res) => {
     const newBlock = blockchain.addBlock({ sensor_id, value, timestamp });
     console.log(`✅ Block baru ditambahkan: ${newBlock.index}`);
 
-    // Broadcast block baru ke semua peers
-    try {
-      console.log(`🔄 Starting broadcast for block ${newBlock.index}...`);
-      await broadcastBlock(newBlock);
-      console.log(`✅ Broadcast completed for block ${newBlock.index}`);
-    } catch (error) {
-      console.warn('⚠️ Broadcast failed:', error.message);
+    // Rate limiting untuk broadcast
+    const now = Date.now();
+    if (now - lastBroadcastTime < BROADCAST_COOLDOWN) {
+      console.log(`⏳ Broadcast cooldown active, skipping broadcast for block ${newBlock.index}`);
+    } else {
+      // Broadcast block baru ke semua peers
+      try {
+        console.log(`🔄 Starting broadcast for block ${newBlock.index}...`);
+        lastBroadcastTime = now;
+        await broadcastBlock(newBlock);
+        console.log(`✅ Broadcast completed for block ${newBlock.index}`);
+      } catch (error) {
+        console.warn('⚠️ Broadcast failed:', error.message);
+      }
     }
 
     res.json({ 
