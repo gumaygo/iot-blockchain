@@ -76,7 +76,16 @@ export async function syncChain(blockchain) {
       // Validate chain using Merkle tree
       if (remoteChain.length > 0) {
         console.log(`🔍 Validating remote chain from ${peer} with Merkle tree...`);
-        const isValid = chainValidator.validateChainWithMerkle(remoteChain);
+        
+        // Use simple validation for small chains, Merkle for larger chains
+        let isValid;
+        if (remoteChain.length < 4) {
+          console.log(`ℹ️ Using simple validation for small chain (${remoteChain.length} blocks)`);
+          isValid = chainValidator.validateChainSimple(remoteChain);
+        } else {
+          isValid = chainValidator.validateChainWithMerkle(remoteChain);
+        }
+        
         console.log(`✅ Remote chain validation result: ${isValid}`);
         
         if (isValid) {
