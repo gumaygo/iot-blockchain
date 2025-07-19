@@ -103,17 +103,33 @@ async function ReceiveBlock(call, callback) {
     // Block tidak ada, lanjutkan
   }
   
-  // Validasi sequence - lebih fleksibel untuk race condition
-  if (block.index > latest.index + 1) {
+  // Validasi sequence - lebih fleksibel untuk chain divergence
+  if (block.index > latest.index + 2) {
     console.warn(`❌ Block ${block.index} is too far ahead (latest: ${latest.index})`);
     return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Block too far ahead' });
   }
   
+  // Jika previousHash tidak match, coba sync dulu
   if (block.previousHash !== latest.hash) {
-    console.warn(`❌ Block ${block.index} previousHash mismatch`);
-    console.warn(`Expected: ${latest.hash}`);
-    console.warn(`Got: ${block.previousHash}`);
-    return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid previousHash' });
+    console.warn(`⚠️ PreviousHash mismatch for block ${block.index}, attempting sync...`);
+    
+    // Coba sync dengan peers untuk mendapatkan chain yang benar
+    try {
+      const { syncChain } = await import('./sync.js');
+      await syncChain(blockchain);
+      
+      // Cek lagi setelah sync
+      const newLatest = blockchain.getLatestBlock();
+      if (block.previousHash !== newLatest.hash) {
+        console.warn(`❌ PreviousHash still mismatch after sync for block ${block.index}`);
+        return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid previousHash after sync' });
+      }
+      
+      console.log(`✅ PreviousHash match after sync for block ${block.index}`);
+    } catch (e) {
+      console.warn(`❌ Sync failed during previousHash validation:`, e.message);
+      return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid previousHash' });
+    }
   }
   
   try {

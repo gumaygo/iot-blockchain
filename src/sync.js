@@ -20,6 +20,8 @@ export function getPeers() {
 
 export async function syncChain(blockchain) {
   const localChain = blockchain.getChain();
+  let hasChanges = false;
+  
   for (const peer of peers) {
     const client = new BlockchainService(peer, credentials);
     console.log(`🔗 Sync ke peer: ${peer}`);
@@ -57,17 +59,51 @@ export async function syncChain(blockchain) {
                   .run(block.index, block.timestamp, block.data, block.previousHash, block.hash); // Data sudah string JSON
               }
               console.log(`🔄 Synced from ${peer} ✅`);
+              hasChanges = true;
             } catch (e) {
               console.error('❌ Error writing chain to DB:', e.message);
             }
           } else {
             console.warn('⚠️ Remote chain invalid, not syncing!');
           }
+        } else if (remoteChain.length === localChain.length) {
+          // Cek apakah ada divergence di chain yang sama panjang
+          const localLatest = localChain[localChain.length - 1];
+          const remoteLatest = remoteChain[remoteChain.length - 1];
+          
+          if (localLatest && remoteLatest && localLatest.hash !== remoteLatest.hash) {
+            console.warn(`⚠️ Chain divergence detected at length ${localChain.length}`);
+            console.warn(`Local latest hash: ${localLatest.hash}`);
+            console.warn(`Remote latest hash: ${remoteLatest.hash}`);
+            
+            // Pilih chain yang lebih panjang atau lebih baru
+            if (remoteLatest.timestamp > localLatest.timestamp) {
+              console.log(`🔄 Choosing remote chain (newer timestamp)`);
+              try {
+                blockchain.db.prepare('DELETE FROM block').run();
+                for (let i = 0; i < remoteChain.length; i++) {
+                  const block = remoteChain[i];
+                  blockchain.db.prepare('INSERT INTO block (idx, timestamp, data, previousHash, hash) VALUES (?, ?, ?, ?, ?)')
+                    .run(block.index, block.timestamp, block.data, block.previousHash, block.hash);
+                }
+                console.log(`🔄 Chain repaired from ${peer} ✅`);
+                hasChanges = true;
+              } catch (e) {
+                console.error('❌ Error repairing chain:', e.message);
+              }
+            }
+          }
         }
         resolve();
       });
     });
     console.log(`🔚 Selesai mencoba sync ke peer: ${peer}`);
+  }
+  
+  if (hasChanges) {
+    console.log(`🔄 Chain sync completed with changes`);
+  } else {
+    console.log(`ℹ️ Chain sync completed - no changes needed`);
   }
 }
 
@@ -108,6 +144,22 @@ export async function broadcastBlock(block) {
         console.log(`⏭️ Skipping ${peer} - already has block ${block.index} (chain length: ${peerChainLength})`);
         continue;
       }
+      
+      // Cek apakah peer siap menerima block ini
+      if (peerChainLength < block.index - 1) {
+        console.log(`⏳ ${peer} chain too short (${peerChainLength}), skipping broadcast`);
+        continue;
+      }
+      
+      // Cek previousHash compatibility
+      if (peerChainLength >= block.index - 1) {
+        const peerLatestBlock = response.chain[peerChainLength - 1];
+        if (peerLatestBlock && peerLatestBlock.hash !== block.previousHash) {
+          console.log(`⚠️ ${peer} previousHash mismatch, skipping broadcast`);
+          continue;
+        }
+      }
+      
     } catch (e) {
       console.warn(`⚠️ Could not check ${peer} chain, proceeding with broadcast:`, e.message);
     }
