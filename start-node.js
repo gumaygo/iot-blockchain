@@ -6,7 +6,7 @@ import fs from 'fs';
 import path from 'path';
 
 const NODES = [
-  { name: 'Node-1', address: '172.16.1.253:50051' },
+  { name: 'Node-1', address: '172.16.2.248:50051' },
   { name: 'Node-2', address: '172.16.2.253:50051' },
   { name: 'Node-3', address: '172.16.2.254:50051' }
 ];

@@ -10,10 +10,12 @@ C  = ID
 ST = Lampung
 L  = Bandar Lampung
 O  = SensorNuklirCorp
-CN = 172.16.2.254
+CN = 172.16.2.250
 
 [req_ext]
 subjectAltName = @alt_names
 
 [alt_names]
-IP.1 = 172.16.2.254
+IP.1 = 172.16.2.250
+DNS.1 = localhost
+DNS.2 = 172.16.2.250

@@ -4,7 +4,7 @@ import { signData, getPublicKey } from './src/utils.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const ENDPOINT = process.env.SENSOR_ENDPOINT || 'http://172.16.1.253:3000/add-sensor-data';
+const ENDPOINT = process.env.SENSOR_ENDPOINT || 'http://172.16.2.248:3000/add-sensor-data';
 const INTERVAL_MS = parseInt(process.env.SENSOR_INTERVAL_MS || '0', 10); // 0 = sekali saja
 const RANDOM = process.env.SENSOR_RANDOM === '1';
 const BATCH_SIZE = parseInt(process.env.SENSOR_BATCH_SIZE || '1', 10);

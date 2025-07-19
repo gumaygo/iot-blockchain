@@ -20,21 +20,27 @@ const packageDefinition = protoLoader.loadSync(
 const grpcObject = grpc.loadPackageDefinition(packageDefinition);
 const blockchainProto = grpcObject.blockchain;
 
-// TLS
-const ca = fs.readFileSync(path.join(__dirname, 'key', 'ca.crt'));
-const cert = fs.readFileSync(path.join(__dirname, 'key', 'server.crt'));
-const key = fs.readFileSync(path.join(__dirname, 'key', 'server.key'));
-const credentials = grpc.ServerCredentials.createSsl(
-  ca,
-  [{
-    cert_chain: cert,
-    private_key: key
-  }],
-  true
-);
+// Temporarily disable TLS for testing
+// const ca = fs.readFileSync(path.join(__dirname, 'key', 'ca.crt'));
+// const cert = fs.readFileSync(path.join(__dirname, 'key', 'server.crt'));
+// const key = fs.readFileSync(path.join(__dirname, 'key', 'server.key'));
+// const credentials = grpc.ServerCredentials.createSsl(
+//   ca,
+//   [{
+//     cert_chain: cert,
+//     private_key: key
+//   }],
+//   true
+// );
 
-// Client credentials for peer communication
+// Use insecure connection for testing
+const credentials = grpc.ServerCredentials.createInsecure();
+
+// Client credentials for peer communication (insecure for testing)
 export const clientCredentials = grpc.credentials.createInsecure();
+
+// Server credentials with proper hostname
+const serverCredentials = grpc.ServerCredentials.createInsecure();
 
 // Blockchain instance will be set by app.js
 let blockchain = null;
@@ -194,7 +200,7 @@ server.addService(blockchainProto.Blockchain.service, {
   AddBlock: (call, callback) => { AddBlock(call, callback); }
 });
 
-server.bindAsync('0.0.0.0:50051', credentials, () => {
+server.bindAsync('0.0.0.0:50051', serverCredentials, () => {
   console.log('✅ gRPC server running on port 50051');
   server.start();
 });
