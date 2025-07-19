@@ -18,12 +18,19 @@ export function getPeers() {
 }
 
 export async function syncChain(blockchain) {
-  const localChain = await blockchain.getChain();
+  const localChain = blockchain.getChain();
   for (const peer of peers) {
     const client = new BlockchainService(peer, credentials);
-
+    console.log(`🔗 Sync ke peer: ${peer}`);
     await new Promise((resolve) => {
+      // Set timeout 3 detik
+      const timeout = setTimeout(() => {
+        console.warn(`⏰ Timeout sync dari ${peer}`);
+        resolve();
+      }, 3000);
+
       client.GetBlockchain({}, async (err, response) => {
+        clearTimeout(timeout);
         if (err) {
           console.warn(`❌ Failed to sync from ${peer}:`, err.message);
           return resolve();
@@ -33,7 +40,6 @@ export async function syncChain(blockchain) {
         console.log(`Peer ${peer} chain length: ${remoteChain.length}`);
         // Validasi chain dari peer
         if (remoteChain.length > localChain.length && validateChain(remoteChain)) {
-          // Overwrite LevelDB dengan chain dari peer
           try {
             for (let i = 0; i < remoteChain.length; i++) {
               await blockchain.db.put(`block_${i}`, remoteChain[i]);
@@ -49,6 +55,7 @@ export async function syncChain(blockchain) {
         resolve();
       });
     });
+    console.log(`🔚 Selesai mencoba sync ke peer: ${peer}`);
   }
 }
 

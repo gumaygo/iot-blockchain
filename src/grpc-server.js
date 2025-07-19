@@ -3,7 +3,6 @@ import protoLoader from '@grpc/proto-loader';
 import fs from 'fs';
 import path from 'path';
 import { Blockchain } from './blockchain.js';
-import { Level } from 'level';
 
 const __dirname = path.resolve();
 
@@ -38,7 +37,7 @@ const blockchain = await Blockchain.create();
 
 async function GetBlockchain(call, callback) {
   await blockchain.init();
-  const chain = await blockchain.getChain();
+  const chain = blockchain.getChain();
   callback(null, { chain });
 }
 
@@ -51,7 +50,7 @@ async function ReceiveBlock(call, callback) {
     } catch {}
   }
   await blockchain.init();
-  const latest = await blockchain.getLatestBlock();
+  const latest = blockchain.getLatestBlock();
   // Validasi struktur block
   if (typeof block !== 'object' || block === null || typeof block.index !== 'number' || typeof block.previousHash !== 'string' || typeof block.hash !== 'string' || typeof block.data !== 'object') {
     return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid block structure' });
@@ -66,8 +65,8 @@ async function ReceiveBlock(call, callback) {
   }
   if (block.index === latest.index + 1 && block.previousHash === latest.hash) {
     try {
-      await blockchain.addBlock(block.data);
-      const chain = await blockchain.getChain();
+      blockchain.addBlock(block.data);
+      const chain = blockchain.getChain();
       callback(null, { chain });
     } catch (e) {
       callback({ code: grpc.status.INTERNAL, message: e.message });

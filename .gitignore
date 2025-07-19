@@ -1,6 +1,5 @@
 key/
 **/node_modules/
 snapshot/
-chain/
 audit/
-blockchaindb/
+blockchain.sqlite
