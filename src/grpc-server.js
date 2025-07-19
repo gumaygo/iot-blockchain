@@ -3,6 +3,7 @@ import protoLoader from '@grpc/proto-loader';
 import fs from 'fs';
 import path from 'path';
 import { Blockchain } from './blockchain.js';
+import { createHash } from 'crypto';
 
 const __dirname = path.resolve();
 
@@ -72,7 +73,6 @@ async function ReceiveBlock(call, callback) {
   }
   
   // Validasi hash block
-  const { createHash } = require('crypto');
   const expectedHash = createHash('sha256')
     .update(block.index + block.timestamp + block.data + block.previousHash) // Gunakan data string asli
     .digest('hex');

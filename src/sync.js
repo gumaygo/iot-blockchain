@@ -2,6 +2,7 @@ import grpc from '@grpc/grpc-js';
 import protoLoader from '@grpc/proto-loader';
 import { Blockchain } from './blockchain.js';
 import fs from 'fs';
+import { createHash } from 'crypto';
 
 const packageDef = protoLoader.loadSync('./proto/blockchain.proto');
 const grpcObj = grpc.loadPackageDefinition(packageDef);
@@ -136,7 +137,6 @@ function validateChain(chain) {
     }
     
     // Validasi hash block
-    const { createHash } = require('crypto');
     const expectedHash = createHash('sha256')
       .update(block.index + block.timestamp + block.data + block.previousHash) // Gunakan data string asli
       .digest('hex');
