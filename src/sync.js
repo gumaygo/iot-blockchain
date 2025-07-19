@@ -420,7 +420,7 @@ async function getHealthyPeers() {
   
   // Fallback to static peers (exclude self)
   const peers = [
-    '172.16.1.253:50051',
+    '172.16.2.248:50051',
     '172.16.2.253:50051', 
     '172.16.2.254:50051'
   ];

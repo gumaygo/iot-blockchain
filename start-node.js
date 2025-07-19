@@ -7,8 +7,8 @@ import path from 'path';
 
 const NODES = [
   { name: 'Node-1', address: '172.16.2.248:50051' },
-  { name: 'Node-2', address: '172.16.2.253:50051' },
-  { name: 'Node-3', address: '172.16.2.254:50051' }
+  { name: 'Node-2', address: '172.16.2.249:50051' },
+  { name: 'Node-3', address: '172.16.2.250:50051' }
 ];
 
 function createConfigEnv(nodeAddress) {
