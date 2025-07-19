@@ -22,14 +22,7 @@ export class Blockchain {
   constructor() {
     this.db = new Database('blockchain.sqlite');
     this.initializeDatabase();
-    this.initialize(); // Panggil initialize untuk logic genesis block
-  }
-
-  static async create() {
-    const db = new Database('./blockchain.sqlite');
-    const blockchain = new Blockchain(db);
-    await blockchain.init();
-    return blockchain;
+    // Remove initialize() call - will be called by app.js
   }
 
   initializeDatabase() {
@@ -47,15 +40,6 @@ export class Blockchain {
         value TEXT NOT NULL
       );
     `);
-  }
-
-  async init() {
-    const lastIndex = this.getLastIndex();
-    if (lastIndex === null) {
-      // DB kosong, buat genesis block
-      const genesis = this.createGenesisBlock();
-      this._insertBlock(genesis);
-    }
   }
 
   createGenesisBlock() {
@@ -233,6 +217,38 @@ export class Blockchain {
         try {
           const { syncChain } = await import('./sync.js');
           await syncChain(this);
+          
+          // Validate genesis block after sync
+          const syncedChain = this.getChain();
+          if (syncedChain.length > 0) {
+            const syncedGenesis = syncedChain[0];
+            const expectedGenesis = this.createGenesisBlock();
+            
+            if (syncedGenesis.hash !== expectedGenesis.hash) {
+              console.warn('⚠️ Synced genesis block hash mismatch, recreating...');
+              console.log(`Expected: ${expectedGenesis.hash}`);
+              console.log(`Got: ${syncedGenesis.hash}`);
+              
+              // Clear database and create consistent genesis
+              this.db.exec('DELETE FROM blocks');
+              const genesisBlock = this.createGenesisBlock();
+              this.db.prepare(`
+                INSERT INTO blocks (idx, timestamp, data, previousHash, hash)
+                VALUES (?, ?, ?, ?, ?)
+              `).run(
+                genesisBlock.index,
+                genesisBlock.timestamp,
+                JSON.stringify(genesisBlock.data),
+                genesisBlock.previousHash,
+                genesisBlock.hash
+              );
+              
+              console.log('✅ Genesis block recreated with consistent hash');
+            } else {
+              console.log('✅ Genesis block hash is consistent');
+            }
+          }
+          
           console.log('✅ Successfully synced with network, no genesis block needed');
           return;
         } catch (syncError) {

@@ -5,16 +5,29 @@ import { ConsensusManager } from './consensus.js';
 import { PeerDiscovery } from './peer-discovery.js';
 import { ChainValidator } from './merkle-tree.js';
 import fs from 'fs';
-import { createHash } from 'crypto';
+import path from 'path';
+import { clientCredentials } from './grpc-server.js';
 
-const packageDef = protoLoader.loadSync('./proto/blockchain.proto');
-const grpcObj = grpc.loadPackageDefinition(packageDef);
-const BlockchainService = grpcObj.blockchain.Blockchain;
+const __dirname = path.resolve();
+
+// Load proto
+const packageDefinition = protoLoader.loadSync(
+  path.join(__dirname, 'proto', 'blockchain.proto'),
+  {
+    keepCase: true,
+    longs: String,
+    enums: String,
+    defaults: true,
+    oneofs: true
+  }
+);
+const grpcObject = grpc.loadPackageDefinition(packageDefinition);
+const BlockchainService = grpcObject.blockchain.Blockchain;
 
 const ca = fs.readFileSync('./key/ca.crt');
 const clientKey = fs.readFileSync('./key/client.key');
 const clientCert = fs.readFileSync('./key/client.crt');
-const credentials = grpc.credentials.createSsl(ca, clientKey, clientCert);
+// Use client credentials from grpc-server
 
 // Initialize optimization components
 let consensusManager = null;
@@ -183,82 +196,61 @@ async function fallbackSync(blockchain) {
 }
 
 export async function broadcastBlock(block, blockchain) {
-  if (!peerDiscovery) {
-    console.warn('⚠️ Peer discovery not initialized, using fallback broadcast');
-    return await fallbackBroadcast(block);
-  }
-
-  console.log(`🔄 Starting optimized broadcast for block ${block.index}...`);
-  
-  const localChain = blockchain.getChain();
-  const localLength = localChain.length;
-  const healthyPeers = peerDiscovery.getHealthyPeers();
-  
-  console.log(`📡 Broadcasting block ${block.index} to ${healthyPeers.length} healthy peers`);
-  
-  let broadcastCount = 0;
-  const broadcastPromises = [];
-  
-  for (const peer of healthyPeers) {
-    const peerInfo = peerDiscovery.getPeerInfo(peer);
+  try {
+    console.log(`🔄 Starting optimized broadcast for block ${block.index}...`);
     
-    // Smart broadcast logic with peer health
-    if (peerInfo.chainLength >= localLength) {
-      console.log(`⏭️ Skipping ${peer} - already has block ${block.index} (chain length: ${peerInfo.chainLength})`);
-      continue;
+    // Use peer discovery if available
+    let peers = [];
+    if (global.peerDiscovery) {
+      peers = global.peerDiscovery.getHealthyPeers();
+      console.log(`📡 Broadcasting block ${block.index} to ${peers.length} healthy peers`);
+    } else {
+      console.warn('⚠️ Peer discovery not initialized, using fallback broadcast');
+      peers = await getHealthyPeers();
+      console.log(`📡 Fallback broadcasting block ${block.index} to ${peers.length} peers`);
     }
     
-    if (peerInfo.chainLength < block.index - 1) {
-      console.log(`⏳ ${peer} chain too short (${peerInfo.chainLength}), needs sync first`);
-      continue;
+    if (peers.length === 0) {
+      console.log('⚠️ No peers available for broadcast');
+      return;
     }
     
-    // Convert block untuk kompatibilitas dengan proto
-    const protoBlock = {
-      index: block.index,
-      timestamp: block.timestamp,
-      data: JSON.stringify(block.data),
-      hash: block.hash,
-      previousHash: block.previousHash
-    };
-    
-    // Broadcast block with timeout
-    const broadcastPromise = new Promise(async (resolve) => {
+    let successCount = 0;
+    const promises = peers.map(async (peer) => {
       try {
-        const client = new BlockchainService(peer, credentials);
-        
+        const client = new BlockchainService(peer, clientCredentials);
         await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error('Broadcast timeout'));
-          }, 3000);
+          const timeout = setTimeout(() => reject(new Error('Broadcast timeout')), 5000);
           
-          client.AddBlock(protoBlock, (err, response) => {
+          client.AddBlock({
+            index: block.index,
+            timestamp: block.timestamp,
+            data: JSON.stringify(block.data),
+            previousHash: block.previousHash,
+            hash: block.hash
+          }, (err, response) => {
             clearTimeout(timeout);
             if (err) {
-              console.warn(`❌ Failed to broadcast to ${peer}:`, err.message);
               reject(err);
             } else {
-              console.log(`✅ Block ${block.index} broadcasted to ${peer}`);
-              broadcastCount++;
-              resolve();
+              resolve(response);
             }
           });
         });
         
-        resolve();
+        console.log(`✅ Block ${block.index} broadcasted to ${peer}`);
+        successCount++;
       } catch (error) {
+        console.error(`❌ Failed to broadcast to ${peer}:`, error.message);
         console.warn(`⚠️ Error broadcasting to ${peer}:`, error.message);
-        resolve();
       }
     });
     
-    broadcastPromises.push(broadcastPromise);
+    await Promise.allSettled(promises);
+    console.log(`✅ Optimized broadcast completed for block ${block.index} (${successCount}/${peers.length} peers)`);
+  } catch (error) {
+    console.error('❌ Broadcast error:', error.message);
   }
-  
-  // Wait for all broadcasts to complete
-  await Promise.allSettled(broadcastPromises);
-  
-  console.log(`✅ Optimized broadcast completed for block ${block.index} (${broadcastCount}/${healthyPeers.length} peers)`);
 }
 
 // Fallback broadcast
@@ -421,17 +413,26 @@ function validateChain(chain) {
 
 // Helper function untuk get healthy peers
 async function getHealthyPeers() {
+  // Use peer discovery if available, otherwise fallback to static peers
+  if (global.peerDiscovery) {
+    return global.peerDiscovery.getHealthyPeers();
+  }
+  
+  // Fallback to static peers (exclude self)
   const peers = [
     '172.16.1.253:50051',
     '172.16.2.253:50051', 
     '172.16.2.254:50051'
   ];
   
+  const nodeAddress = process.env.NODE_ADDRESS || '172.16.1.253:50051';
+  const filteredPeers = peers.filter(peer => peer !== nodeAddress);
+  
   const healthyPeers = [];
   
-  for (const peer of peers) {
+  for (const peer of filteredPeers) {
     try {
-      const client = new BlockchainService(peer, credentials);
+      const client = new BlockchainService(peer, clientCredentials);
       await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Health check timeout')), 3000);
         client.GetBlockchain({}, (err) => {

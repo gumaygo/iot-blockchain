@@ -1,11 +1,21 @@
 import express from 'express';
 import { Blockchain } from './blockchain.js';
-import { syncChain, broadcastBlock, initializeOptimizations } from './sync.js';
+import { syncChain, broadcastBlock } from './sync.js';
 import { ChainPruning } from './chain-pruning.js';
 import { signData, getPublicKey, verifySignature } from './utils.js';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config({ path: './config.env' });
 
 const app = express();
 app.use(express.json());
+
+// Get configuration from environment
+const NODE_ADDRESS = process.env.NODE_ADDRESS || '172.16.1.253:50051';
+const NODE_PORT = process.env.NODE_PORT || 3000;
+const BROADCAST_COOLDOWN = parseInt(process.env.BROADCAST_COOLDOWN) || 1000;
+const SYNC_INTERVAL = parseInt(process.env.SYNC_INTERVAL) || 30000;
 
 // Initialize blockchain
 const blockchain = new Blockchain();
@@ -15,6 +25,9 @@ async function initializeApp() {
   try {
     await blockchain.initialize();
     console.log('✅ Blockchain initialized successfully');
+    
+    // Initialize optimizations after blockchain
+    await initializeOptimizations();
   } catch (error) {
     console.error('❌ Blockchain initialization failed:', error.message);
     process.exit(1);
@@ -25,14 +38,39 @@ async function initializeApp() {
 initializeApp();
 
 // Initialize optimizations
-initializeOptimizations(blockchain);
+let consensusManager, peerDiscovery, chainValidator, chainPruning;
 
-// Initialize chain pruning
-const chainPruning = new ChainPruning(blockchain);
+async function initializeOptimizations() {
+  try {
+    console.log('🚀 Initializing blockchain optimizations...');
+    
+    // Initialize consensus manager
+    const { ConsensusManager } = await import('./consensus.js');
+    consensusManager = new ConsensusManager();
+    
+    // Initialize peer discovery with node address
+    const { PeerDiscovery } = await import('./peer-discovery.js');
+    peerDiscovery = new PeerDiscovery(NODE_ADDRESS);
+    
+    // Set global for sync.js access
+    global.peerDiscovery = peerDiscovery;
+    
+    // Initialize chain validator
+    const { ChainValidator } = await import('./merkle-tree.js');
+    chainValidator = new ChainValidator();
+    
+    // Initialize chain pruning
+    const { ChainPruning } = await import('./chain-pruning.js');
+    chainPruning = new ChainPruning(blockchain);
+    
+    console.log('🚀 Blockchain optimizations initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize optimizations:', error.message);
+  }
+}
 
 // Rate limiting untuk broadcast
 let lastBroadcastTime = 0;
-const BROADCAST_COOLDOWN = 1000; // 1 detik cooldown (dikurangi)
 
 // Sync lock untuk mencegah konflik
 let isSyncing = false;
@@ -289,12 +327,16 @@ app.post('/reset-database', async (req, res) => {
 
 // Start REST API server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 REST API server running on port ${PORT}`);
+app.listen(NODE_PORT, () => {
+  console.log(`🚀 REST API server running on port ${NODE_PORT}`);
 });
 
 // Import dan start gRPC server
 import './grpc-server.js';
+import { setBlockchain } from './grpc-server.js';
+
+// Set blockchain instance for gRPC server
+setBlockchain(blockchain);
 
 // Sync bersamaan setiap 30 detik (detik 00 dan 30)
 function scheduleSyncAtMinute() {

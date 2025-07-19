@@ -2,7 +2,6 @@ import grpc from '@grpc/grpc-js';
 import protoLoader from '@grpc/proto-loader';
 import fs from 'fs';
 import path from 'path';
-import { Blockchain } from './blockchain.js';
 import { createHash } from 'crypto';
 
 const __dirname = path.resolve();
@@ -34,7 +33,15 @@ const credentials = grpc.ServerCredentials.createSsl(
   true
 );
 
-const blockchain = await Blockchain.create();
+// Client credentials for peer communication
+export const clientCredentials = grpc.credentials.createInsecure();
+
+// Blockchain instance will be set by app.js
+let blockchain = null;
+
+export function setBlockchain(blockchainInstance) {
+  blockchain = blockchainInstance;
+}
 
 function convertChainToProto(chain) {
   return chain.map(block => ({
@@ -47,7 +54,6 @@ function convertChainToProto(chain) {
 }
 
 async function GetBlockchain(call, callback) {
-  await blockchain.init();
   const chain = blockchain.getChain();
   const protoChain = convertChainToProto(chain);
   callback(null, { chain: protoChain });
@@ -67,7 +73,6 @@ async function ReceiveBlock(call, callback) {
     return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid JSON data' });
   }
   
-  await blockchain.init();
   const latest = blockchain.getLatestBlock();
   
   console.log(`📊 Local latest block: ${latest.index}, received block: ${block.index}`);
@@ -158,8 +163,6 @@ async function AddBlock(call, callback) {
     console.warn(`❌ Invalid JSON data in block ${block.index}:`, e.message);
     return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid JSON data' });
   }
-  
-  await blockchain.init();
   
   try {
     // Cek apakah block sudah ada

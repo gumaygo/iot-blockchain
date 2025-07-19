@@ -10,8 +10,9 @@ const grpcObj = grpc.loadPackageDefinition(packageDef);
 const BlockchainService = grpcObj.blockchain.Blockchain;
 
 export class PeerDiscovery {
-  constructor() {
-    this.peers = new Map(); // peer -> { address, lastSeen, health, chainLength }
+  constructor(nodeAddress = null) {
+    this.peers = new Map();
+    this.nodeAddress = nodeAddress; // IP:port dari node ini
     this.discoveryInterval = 60000; // 1 menit
     this.healthTimeout = 10000; // 10 detik
     this.maxPeers = 10;
@@ -20,55 +21,48 @@ export class PeerDiscovery {
 
   loadStaticPeers() {
     try {
-      const staticPeers = JSON.parse(fs.readFileSync('./peers.json', 'utf-8'));
-      staticPeers.forEach(peer => {
+      const peersPath = path.join(process.cwd(), 'peers.json');
+      const staticPeers = JSON.parse(fs.readFileSync(peersPath, 'utf8'));
+      
+      // Filter out self from peer list
+      const filteredPeers = staticPeers.filter(peer => peer !== this.nodeAddress);
+      
+      console.log(`📡 Loaded ${filteredPeers.length} static peers (excluded self: ${this.nodeAddress})`);
+      
+      // Initialize peers
+      filteredPeers.forEach(peer => {
         this.peers.set(peer, {
           address: peer,
-          lastSeen: Date.now(),
           health: 'unknown',
+          lastSeen: null,
           chainLength: 0,
-          responseTime: 0
+          responseTime: null
         });
       });
-      console.log(`📡 Loaded ${staticPeers.length} static peers`);
-    } catch (e) {
-      console.warn('⚠️ Could not load static peers:', e.message);
+    } catch (error) {
+      console.warn('⚠️ Could not load static peers:', error.message);
     }
   }
 
   // Add new peer dynamically
-  addPeer(address) {
-    if (this.peers.size >= this.maxPeers) {
-      console.warn(`⚠️ Max peers reached (${this.maxPeers}), removing oldest peer`);
-      this.removeOldestPeer();
+  addPeer(peerAddress) {
+    if (peerAddress !== this.nodeAddress && !this.peers.has(peerAddress)) {
+      this.peers.set(peerAddress, {
+        address: peerAddress,
+        health: 'unknown',
+        lastSeen: null,
+        chainLength: 0,
+        responseTime: null
+      });
+      console.log(`➕ Added new peer: ${peerAddress}`);
     }
-    
-    this.peers.set(address, {
-      address,
-      lastSeen: Date.now(),
-      health: 'unknown',
-      chainLength: 0,
-      responseTime: 0
-    });
-    
-    console.log(`✅ Added new peer: ${address}`);
   }
 
-  // Remove oldest peer
-  removeOldestPeer() {
-    let oldestPeer = null;
-    let oldestTime = Date.now();
-    
-    for (const [address, peer] of this.peers) {
-      if (peer.lastSeen < oldestTime) {
-        oldestTime = peer.lastSeen;
-        oldestPeer = address;
-      }
-    }
-    
-    if (oldestPeer) {
-      this.peers.delete(oldestPeer);
-      console.log(`🗑️ Removed oldest peer: ${oldestPeer}`);
+  // Remove peer
+  removePeer(peerAddress) {
+    if (this.peers.has(peerAddress)) {
+      this.peers.delete(peerAddress);
+      console.log(`➖ Removed peer: ${peerAddress}`);
     }
   }
 
@@ -154,20 +148,26 @@ export class PeerDiscovery {
     }
   }
 
-  // Get healthy peers only
+  // Get healthy peers (exclude self)
   getHealthyPeers() {
     const healthyPeers = [];
-    for (const [address, peer] of this.peers) {
-      if (peer.health === 'healthy') {
-        healthyPeers.push(address);
+    for (const [peer, info] of this.peers) {
+      if (info.health === 'healthy' && peer !== this.nodeAddress) {
+        healthyPeers.push(peer);
       }
     }
     return healthyPeers;
   }
 
-  // Get all peers
+  // Get all peers (exclude self)
   getAllPeers() {
-    return Array.from(this.peers.keys());
+    const allPeers = [];
+    for (const [peer, info] of this.peers) {
+      if (peer !== this.nodeAddress) {
+        allPeers.push(peer);
+      }
+    }
+    return allPeers;
   }
 
   // Get peer info
@@ -207,5 +207,44 @@ export class PeerDiscovery {
   stopDiscovery() {
     console.log('🛑 Stopping peer discovery service...');
     // Clear intervals if needed
+  }
+
+  // Update peer health
+  updatePeerHealth(peer, health, chainLength = 0, responseTime = null) {
+    if (this.peers.has(peer)) {
+      const peerInfo = this.peers.get(peer);
+      peerInfo.health = health;
+      peerInfo.lastSeen = Date.now();
+      peerInfo.chainLength = chainLength;
+      peerInfo.responseTime = responseTime;
+      this.peers.set(peer, peerInfo);
+    }
+  }
+
+  // Get peer status
+  getPeerStatus() {
+    const status = {
+      total: 0,
+      healthy: 0,
+      unhealthy: 0,
+      unknown: 0,
+      peers: []
+    };
+
+    for (const [peer, info] of this.peers) {
+      if (peer !== this.nodeAddress) {
+        status.total++;
+        status[info.health]++;
+        status.peers.push({
+          address: peer,
+          health: info.health,
+          lastSeen: info.lastSeen,
+          chainLength: info.chainLength,
+          responseTime: info.responseTime
+        });
+      }
+    }
+
+    return status;
   }
 } 
