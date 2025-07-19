@@ -83,11 +83,11 @@ export class Blockchain {
     const lastBlock = this.getLatestBlock();
     const newIndex = lastBlock.index + 1;
     
-    // Cek apakah block dengan index ini sudah ada
+    // Cek apakah block dengan index ini sudah ada (prinsip blockchain: tidak overwrite)
     try {
       const existingBlock = this.db.prepare('SELECT * FROM block WHERE idx = ?').get(newIndex);
       if (existingBlock) {
-        console.warn(`⚠️ Block ${newIndex} already exists, skipping...`);
+        console.warn(`⚠️ Block ${newIndex} already exists, skipping... (blockchain immutability)`);
         return this._rowToBlock(existingBlock);
       }
     } catch (e) {
@@ -101,13 +101,41 @@ export class Blockchain {
       lastBlock.hash
     );
     
+    // Verify block consistency sebelum append
+    if (newBlock.previousHash !== lastBlock.hash) {
+      throw new Error(`Block consistency error: previousHash mismatch`);
+    }
+    
+    // APPEND block baru (tidak ada delete!)
     this._insertBlock(newBlock);
+    
+    // Verify append berhasil
+    const insertedBlock = this.db.prepare('SELECT * FROM block WHERE idx = ?').get(newIndex);
+    if (!insertedBlock) {
+      throw new Error(`Failed to append block ${newIndex}`);
+    }
+    
+    console.log(`✅ Block ${newIndex} appended to blockchain`);
     return newBlock;
   }
 
   getChain() {
     const rows = this.db.prepare('SELECT * FROM block ORDER BY idx ASC').all();
-    return rows.map(row => this._rowToBlock(row));
+    const chain = rows.map(row => this._rowToBlock(row));
+    
+    // Verify chain consistency (tidak ada delete, hanya append)
+    for (let i = 1; i < chain.length; i++) {
+      if (chain[i].index !== i) {
+        console.error(`❌ Chain inconsistency: block at index ${i} has wrong index ${chain[i].index}`);
+        throw new Error('Chain index inconsistency detected');
+      }
+      if (chain[i].previousHash !== chain[i-1].hash) {
+        console.error(`❌ Chain inconsistency: block ${i} previousHash mismatch`);
+        throw new Error('Chain hash inconsistency detected');
+      }
+    }
+    
+    return chain;
   }
 
   _insertBlock(block) {

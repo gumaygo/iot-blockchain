@@ -11,7 +11,10 @@ const blockchain = await Blockchain.create();
 
 // Rate limiting untuk broadcast
 let lastBroadcastTime = 0;
-const BROADCAST_COOLDOWN = 1000; // 1 detik cooldown
+const BROADCAST_COOLDOWN = 2000; // 2 detik cooldown (dinaikkan)
+
+// Sync lock untuk mencegah konflik
+let isSyncing = false;
 
 // REST API Routes
 app.get('/blockchain', async (req, res) => {
@@ -46,10 +49,10 @@ app.post('/add-sensor-data', async (req, res) => {
     const newBlock = blockchain.addBlock({ sensor_id, value, timestamp });
     console.log(`✅ Block baru ditambahkan: ${newBlock.index}`);
 
-    // Rate limiting untuk broadcast
+    // Rate limiting untuk broadcast dengan sync lock
     const now = Date.now();
-    if (now - lastBroadcastTime < BROADCAST_COOLDOWN) {
-      console.log(`⏳ Broadcast cooldown active, skipping broadcast for block ${newBlock.index}`);
+    if (now - lastBroadcastTime < BROADCAST_COOLDOWN || isSyncing) {
+      console.log(`⏳ Broadcast cooldown/sync active, skipping broadcast for block ${newBlock.index}`);
     } else {
       // Broadcast block baru ke semua peers
       try {
@@ -108,12 +111,22 @@ app.listen(PORT, () => {
 // Import dan start gRPC server
 import './grpc-server.js';
 
-// Auto sync setiap 30 detik
+// Auto sync setiap 30 detik dengan sync lock
 setInterval(async () => {
+  if (isSyncing) {
+    console.log('⏳ Sync already in progress, skipping...');
+    return;
+  }
+  
   try {
+    isSyncing = true;
+    console.log('🔄 Starting auto sync...');
     await syncChain(blockchain);
+    console.log('✅ Auto sync completed');
   } catch (error) {
     console.error('❌ Auto sync error:', error.message);
+  } finally {
+    isSyncing = false;
   }
 }, 30000);
 
